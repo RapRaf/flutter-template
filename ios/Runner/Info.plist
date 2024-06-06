@@ -5,7 +5,7 @@
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
-		<string>flutter_template</string>
+		<string>FlutterTemplate</string>
 		<key>CFBundleExecutable</key>
 		<string>$(EXECUTABLE_NAME)</string>
 		<key>CFBundleIdentifier</key>
@@ -41,8 +41,6 @@
 			<string>UIInterfaceOrientationLandscapeLeft</string>
 			<string>UIInterfaceOrientationLandscapeRight</string>
 		</array>
-		<key>UIViewControllerBasedStatusBarAppearance</key>
-		<false />
 		<key>CADisableMinimumFrameDurationOnPhone</key>
 		<true />
 		<key>UIApplicationSupportsIndirectInputEvents</key>
@@ -52,5 +50,9 @@
 			<string>https</string>
 			<string>http</string>
 		</array>
+		<key>UIStatusBarHidden</key>
+		<false />
+		<key>NSFaceIDUsageDescription</key>
+		<string>Why is my app authenticating using face id?</string>
 	</dict>
 </plist>
