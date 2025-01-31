@@ -53,7 +53,6 @@
   "logout": "Log out",
   "home": "Home",
   "orders": "Orders",
-  "settings": "Settings",
   "logout_confirmation": "Confirm log out",
   "are_you_sure_logout": "Are you sure you want to log out?",
   "already_logged_in_with": "You are already logged in with:"

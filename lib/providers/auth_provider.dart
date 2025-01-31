@@ -8,78 +8,107 @@ import 'package:flutter_template/providers/storage_service.dart';
 
 class AuthProvider with ChangeNotifier {
   int _loginState = 0;
-  late ThemeMode _theme = ThemeMode.system;
-  late String _language = 'en,US';
+  ThemeMode _theme = ThemeMode.system;
+  String _language = 'en,US';
+  final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+
+  late final Future<bool> initialization;
+
   late List<String> _emails;
   late String _currentMail;
   late String _password;
+  late String? _userId;
   late String _token;
+  late String _sessionToken;
   late String _type;
   late String _id;
   late String _brand;
   late String _model;
-  late String _os;
+  late int? _lastUpdate;
+  late OperatingSystems _os;
   late bool _keepLogged;
+  bool _justLogged = false;
   late FlutterSecureStorage _storage;
   late StorageService _storeService;
   late HttpService _httpService;
   late SnackBarService _snackBarService;
   late FingerprintService _fingerprintService;
-  final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
-      GlobalKey<ScaffoldMessengerState>();
-
-  late final Future<void> initialization;
+  bool _isDark = false;
 
   ThemeMode get theme => _theme;
   String get language => _language;
   List<String> get emails => _emails;
   String get currentMail => _currentMail;
   String get password => _password;
+  String? get userId => _userId;
   String get token => _token;
+  String get sessionToken => _sessionToken;
   String get type => _type;
   String get id => _id;
   String get brand => _brand;
   String get model => _model;
-  String get os => _os;
+  int? get lastUpdate => _lastUpdate;
+  OperatingSystems get os => _os;
   int get loginState => _loginState;
   bool get keepLogged => _keepLogged;
+  bool get justLogged => _justLogged;
   FlutterSecureStorage get storage => _storage;
+  HttpService get httpService => _httpService;
+  bool get isDark => _isDark;
 
   AuthProvider() {
     initialization = _initialize();
   }
 
-  Future<void> _initialize() async {
+  Future<bool> _initialize() async {
     _storage = const FlutterSecureStorage(
         aOptions: AndroidOptions(
           encryptedSharedPreferences: true,
         ),
         iOptions: IOSOptions(
-          accountName: "Raffa",
+          accountName: "FlutterTemplate",
         ));
     _storeService = StorageService(authProvider: this);
-    await _loadFromStorage();
+    if (!await _loadFromStorage()) return false;
     _httpService = HttpService(authProvider: this);
     _snackBarService = SnackBarService(authProvider: this);
     _fingerprintService = FingerprintService();
     notifyListeners();
+    return true;
   }
 
-  Future<void> _loadFromStorage() async {
+  Future<bool> _loadFromStorage() async {
     _theme = await _storeService.getTheme(storage);
     _language = await _storeService.getLanguage(storage);
     _currentMail = await _storeService.getCurrentEmail(storage);
+    _userId = await _storeService.getUserId(storage);
     _type = await _storeService.getType(storage, currentMail);
     _token = await _storeService.getToken(storage);
+    _sessionToken = await _storeService.getSessionToken(storage);
     _keepLogged = await _storeService.getKeepLogged(storage);
     _emails = await _storeService.getEmails(storage);
-    // _id = await _storeService.getId(storage);
-    // _brand = await _storeService.getBrand(storage);
-    // _model = await _storeService.getModel(storage);
-    // _os = await _storeService.getOs(storage);
+    _lastUpdate = await _storeService.getLastUpdated(storage);
+    _os = await _storeService.getOs(storage);
+    if (_os == OperatingSystems.unsupported) return false;
+    if (_os == OperatingSystems.unknown) {
+      _os = await _storeService.initPlatformState(storage);
+      if (_os == OperatingSystems.unsupported) return false;
+    }
+    _id = await _storeService.getId(storage);
+    _brand = await _storeService.getBrand(storage);
+    _model = await _storeService.getModel(storage);
+    return true;
+  }
+
+  void mNotifyListeners() {
+    if (_loginState == 2) notifyListeners();
   }
 
   void initProvider() async {
+    _httpService = HttpService(authProvider: this);
+    _snackBarService = SnackBarService(authProvider: this);
+    _fingerprintService = FingerprintService();
     _currentMail = await _storeService.getCurrentEmail(storage);
     _type = await _storeService.getType(storage, currentMail);
     _token = await _storeService.getToken(storage);
@@ -99,7 +128,7 @@ class AuthProvider with ChangeNotifier {
 
   void setLoginState({
     required int newLoginState,
-  }) async {
+  }) {
     _loginState = newLoginState;
     notifyListeners();
   }
@@ -117,7 +146,7 @@ class AuthProvider with ChangeNotifier {
   void setPassword({
     required String email,
     required String newPassword,
-  }) async {
+  }) {
     _password = newPassword;
     _storeService.setPassword(
         storage: storage, email: email, newPassword: newPassword);
@@ -126,15 +155,24 @@ class AuthProvider with ChangeNotifier {
 
   void setToken({
     required String newToken,
-  }) async {
+  }) {
     _token = newToken;
     _storeService.setToken(storage: storage, newToken: newToken);
     notifyListeners();
   }
 
+  void setSessionToken({
+    required String newSessionToken,
+  }) {
+    _sessionToken = newSessionToken;
+    _storeService.setSessionToken(
+        storage: storage, newSessionToken: newSessionToken);
+    notifyListeners();
+  }
+
   void setTheme({
     required ThemeMode newTheme,
-  }) async {
+  }) {
     _theme = newTheme;
     _storeService.setTheme(storage: storage, newTheme: newTheme);
     notifyListeners();
@@ -142,7 +180,7 @@ class AuthProvider with ChangeNotifier {
 
   void setLanguage({
     required String newLanguage,
-  }) async {
+  }) {
     _language = newLanguage;
     _storeService.setLanguage(storage: storage, newLanguage: newLanguage);
     notifyListeners();
@@ -155,6 +193,11 @@ class AuthProvider with ChangeNotifier {
     _type = newType;
     _storeService.setType(storage: storage, newType: newType, email: email);
     notifyListeners();
+  }
+
+  void setLastUpdate({required int lastUpdate}) {
+    _lastUpdate = lastUpdate;
+    _storeService.setLastUpdate(storage: storage, newLastUpdate: lastUpdate);
   }
 
   void setID({
@@ -182,7 +225,7 @@ class AuthProvider with ChangeNotifier {
   }
 
   void setOS({
-    required String newOS,
+    required OperatingSystems newOS,
   }) async {
     _os = newOS;
     _storeService.setOS(storage: storage, newOS: newOS);
@@ -195,32 +238,44 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void sendRequest(HttpEntry request, BuildContext context) {
+  void sendRequest(HttpEntry request) {
     _httpService.addToQueue(httpEntry: request);
   }
 
   void handleLoginResponse(
       Map<String, dynamic> response, String email, String password) {
-    _currentMail = email;
-    _password = "";
-    _token = response['data']['token'];
-    _type = response['data']['role'];
+        /// DEPENDS ON BACKEND RESPONSE
     _storeService.setToken(
         storage: storage, newToken: response['data']['token']);
+    _storeService.setUserId(
+        storage: storage, newUserId: response['data']['id'].toString());
     _storeService.setType(
         storage: storage, newType: response['data']['role'], email: email);
     _storeService.setCurrentEmail(storage: storage, newCurrentEmail: email);
     _storeService.setPassword(
         storage: storage, email: email, newPassword: password);
-    _loginState = 2;
 
+    _currentMail = email;
+    _password = "";
+    _token = response['data']['token'];
+    _type = response['data']['role'];
+    _userId = response['data']['id'].toString();
+    _loginState = 0;
+    _justLogged = true;
     notifyListeners();
   }
 
+  void fetchForLogin() {
+    _justLogged = false;
+  }
+
   void handleLogoutResponse() {
+    _storeService.setToken(storage: storage, newToken: "");
+    _storeService.setUserId(storage: storage, newUserId: "");
+
     _token = "";
     _type = "";
-    _storeService.setToken(storage: storage, newToken: "");
+    _userId = "";
     _currentMail = "";
     _password = "";
     _loginState = 0;
@@ -250,6 +305,11 @@ class AuthProvider with ChangeNotifier {
   void deleteAccount(String account) async {
     await _storeService.deleteAccount(storage: storage, account: account);
     _emails = await _storeService.getEmails(storage);
+    notifyListeners();
+  }
+
+  void setDark(bool isDark) {
+    _isDark = isDark;
     notifyListeners();
   }
 }

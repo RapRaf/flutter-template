@@ -1,5 +1,6 @@
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_template/http_requests/auth/auth.dart';
 import 'package:flutter_template/models/http_request.dart';
 import 'package:flutter_template/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
@@ -22,14 +23,13 @@ class _LogoutButtonState extends State<LogoutButton> {
           actions: <Widget>[
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
+                Navigator.of(context).pop();
               },
               child: Text(AppLocalizations.of(context)!.cancel),
             ),
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-                // Perform the logout operation here
+                Navigator.of(context).pop();
                 _logout();
               },
               child: Text(AppLocalizations.of(context)!.logout),
@@ -41,17 +41,12 @@ class _LogoutButtonState extends State<LogoutButton> {
   }
 
   void _logout() {
-    HttpEntry req = HttpEntry(
-        method: 'POST',
-        path: 'logout',
+    HttpEntry req = HttpRequests().logOut(
         responseListener: (response) =>
             Provider.of<AuthProvider>(context, listen: false)
-                .handleLogoutResponse(),
-        errorListener: (response) =>
-            Provider.of<AuthProvider>(context, listen: false)
-                .showSnackBar(response['data']));
+                .handleLogoutResponse());
 
-    Provider.of<AuthProvider>(context, listen: false).sendRequest(req, context);
+    Provider.of<AuthProvider>(context, listen: false).sendRequest(req);
   }
 
   @override
@@ -61,7 +56,17 @@ class _LogoutButtonState extends State<LogoutButton> {
       child: TextButton(
         onPressed: () => _showLogoutDialog(context),
         onLongPress: () => _showLogoutDialog(context),
-        child: Text(AppLocalizations.of(context)!.logout),
+        style: TextButton.styleFrom(
+          backgroundColor: Colors.blueAccent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 24),
+        ),
+        child: Text(
+          AppLocalizations.of(context)!.logout,
+          style: const TextStyle(color: Colors.white),
+        ),
       ),
     );
   }

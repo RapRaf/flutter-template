@@ -1,10 +1,10 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 class HttpEntry {
-  final Function responseListener, errorListener;
+  final Function responseListener;
+  final Function? errorListener;
   final String path, method;
   final Map<String, dynamic>? params;
   final String? body;
@@ -13,9 +13,9 @@ class HttpEntry {
 
   HttpEntry(
       {required this.responseListener,
-      required this.errorListener,
       required this.method,
       required this.path,
+      this.errorListener,
       this.body,
       this.params,
       this.automatic = true});
@@ -42,10 +42,10 @@ class HttpRequest {
 
   Uri _getUrl() {
     return Uri(
-        scheme: dotenv.get('SCHEMA'),
+        scheme: dotenv.get('HTTP_SCHEMA'),
         host: dotenv.get('HOST'),
         port: int.parse(dotenv.get('PORT')),
-        path: dotenv.get('API_PREFIX') + path,
+        path: "${dotenv.get('API_PREFIX')}/$path",
         queryParameters: params);
   }
 
@@ -84,55 +84,10 @@ class HttpRequest {
         }
     }
 
-    debugPrint("Status: ${response.statusCode}");
+    // log("Status: ${response.statusCode}");
 
-    debugPrint("Data: $responseBody");
+    // log("Data: $responseBody");
 
-    managerResponse(tag, response.statusCode, responseBody);
+    managerResponse(tag, response.statusCode, responseBody, response.headers);
   }
-
-  // autoLogIn() async {
-  //   var provider = Provider.of<AuthProvider>(context, listen: false);
-  //   if (!provider.keepLogged) {
-  //     autoLogInFail();
-  //     return;
-  //   }
-
-  //   String email = provider.email;
-  //   String password = provider.password;
-
-  //   oldReq = provider.requestList.elementAt(provider.requestList.last.);
-
-  //   LogIn logInRequest = LogIn(
-  //       email: email,
-  //       password: password,
-  //       responseListener: (body) => repeatRequest(),
-  //       errorListener: (body) => autoLogInFail(),
-  //       context: context);
-
-  //   logInRequest.run();
-  // }
-
-  // repeatRequest() async {
-  //   newReq = HttpRequest(
-  //       method: oldReq.method,
-  //       path: oldReq.path,
-  //       responseListener: () {
-  //         oldReq.responseBody = newReq.responseBody;
-  //         oldReq.responseListener();
-  //       },
-  //       errorListener: () {
-  //         oldReq.responseBody = newReq.responseBody;
-  //         oldReq.errorListener();
-  //       },
-  //       context: context);
-
-  //   newReq.send();
-  // }
-
-  // autoLogInFail() {
-  //   if (context.mounted) {
-  //     context.read<AuthProvider>().setLoginState(newLoginState: 1/   }
-  //   errorListener(responseBody);
-  // }
 }

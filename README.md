@@ -25,6 +25,9 @@ This template includes two main ChangeNotifier classes for managing app state an
 
 - `AppProvider` is mounted lower in the widget tree and is activated once the login is successful and all necessary data is fetched and ready for use.
 
+## GENERATE LOCALIZATIONS
+flutter pub add intl:any
+
 ## Contributing
 
 Contributions are welcome! Your help is precious.

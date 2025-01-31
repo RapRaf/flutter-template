@@ -53,7 +53,6 @@
   "logout": "Esci",
   "home": "Home",
   "orders": "Ordini",
-  "settings": "Impostazioni",
   "logout_confirmation": "Conferma disconnessione",
   "are_you_sure_logout": "Sei sicuro di volerti disconnettere?",
   "already_logged_in_with": "Hai già eseguito l'accesso con:"

@@ -2,7 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_template/components/existing_accounts.dart';
-import 'package:flutter_template/http_requests/auth/log_in.dart';
+import 'package:flutter_template/http_requests/auth/auth.dart';
 import 'package:flutter_template/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -26,47 +26,49 @@ class AccessViewState extends State<AccessView> {
     });
   }
 
-  void _toggleKeepLogged(bool? value) async {
-    if (Provider.of<AuthProvider>(context, listen: false).hasFingerPrints()) {
-      await Provider.of<AuthProvider>(context, listen: false)
-          .authFingerprints()
-          .then((bool isAuth) =>
-              Provider.of<AuthProvider>(context, listen: false)
-                  .setKeepLogged());
-    }
-  }
+  // void _toggleKeepLogged(bool? value) {
+  //   context.read<AuthProvider>().setKeepLogged();
+  // }
 
   void _autoLogIn(String email) async {
-    if (!Provider.of<AuthProvider>(context, listen: false).hasFingerPrints()) {
+    if (!context.read<AuthProvider>().hasFingerPrints()) {
       return;
     }
 
-    await Provider.of<AuthProvider>(context, listen: false)
+    await context
+        .read<AuthProvider>()
         .authFingerprints()
         .then((bool isAuth) async {
       if (!isAuth) return;
-      await Provider.of<AuthProvider>(context, listen: false)
+      await context
+          .read<AuthProvider>()
           .getPassword(email)
           .then((String? pass) {
         if (pass != null && pass.isNotEmpty) {
-          LogIn logIn = LogIn(
-              email: email, password: pass, context: context, automatic: false);
-          logIn.send();
+          context.read<AuthProvider>().sendRequest(HttpRequests().logIn(
+              responseListener: (response) {
+                context
+                    .read<AuthProvider>()
+                    .handleLoginResponse(response, email, pass);
+              },
+              email: email,
+              password: pass));
         }
       });
     });
   }
 
   void _removeAccount(String email) async {
-    if (!Provider.of<AuthProvider>(context, listen: false).hasFingerPrints()) {
+    if (!context.read<AuthProvider>().hasFingerPrints()) {
       return;
     }
 
-    await Provider.of<AuthProvider>(context, listen: false)
+    await context
+        .read<AuthProvider>()
         .authFingerprints()
         .then((bool isAuth) async {
       if (!isAuth) return;
-      Provider.of<AuthProvider>(context, listen: false).deleteAccount(email);
+      context.read<AuthProvider>().deleteAccount(email);
     });
   }
 
@@ -76,12 +78,13 @@ class AccessViewState extends State<AccessView> {
     if (passwordController.text.isEmpty) return;
     if (passwordController.text.length < 7) return;
 
-    LogIn logIn = LogIn(
+    context.read<AuthProvider>().sendRequest(HttpRequests().logIn(
+        responseListener: (response) {
+          context.read<AuthProvider>().handleLoginResponse(
+              response, emailController.text, passwordController.text);
+        },
         email: emailController.text,
-        password: passwordController.text,
-        context: context,
-        automatic: false);
-    logIn.send();
+        password: passwordController.text));
   }
 
   bool isValidEmail(String email) {
@@ -93,131 +96,131 @@ class AccessViewState extends State<AccessView> {
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
-    ThemeMode sysTheme =
-        Provider.of<AuthProvider>(context, listen: false).theme;
 
-    bool isDark = false;
-
-    switch (sysTheme) {
-      case ThemeMode.system:
-        isDark = MediaQuery.of(context).platformBrightness == Brightness.dark;
-        break;
-      case ThemeMode.light:
-        isDark = false;
-        break;
-      default:
-        isDark = true;
-    }
-
+    double width = MediaQuery.of(context).size.width;
     return Scaffold(
       appBar: AppBar(
         title: Text(localizations.access),
       ),
       body: SingleChildScrollView(
-        child: Column(
-          children: [
-            Container(
-              height: 150.0,
-              width: 150.0,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                color: !isDark ? Colors.black : null,
-                image: const DecorationImage(
-                    image: AssetImage('assets/images/logo/logo.png'),
-                    fit: BoxFit.cover,
-                    scale: .5),
-              ),
-            ),
-            if (Provider.of<AuthProvider>(context, listen: false)
-                    .hasFingerPrints() &&
-                context.watch<AuthProvider>().emails.isNotEmpty)
-              ExistingAccount(
-                onTap: (String email) => _autoLogIn(email),
-                onLongPressed: (String email) => _removeAccount(email),
-              ),
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: TextField(
-                controller: emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    labelText: localizations.email,
-                    hintText: localizations.insert_email),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: TextField(
-                controller: passwordController,
-                keyboardType: TextInputType.text,
-                obscureText: _obscureText,
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  labelText: "Password",
-                  hintText: localizations.insertPassword,
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureText ? Icons.visibility : Icons.visibility_off,
-                    ),
-                    onPressed: _togglePasswordVisibility,
+        child: Container(
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: width > 500 ? 490 : width * 0.9,
+            child: Column(
+              children: [
+                Container(
+                  height: 150.0,
+                  width: 150.0,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    color: !context.read<AuthProvider>().isDark
+                        ? Colors.black
+                        : null,
+                    image: const DecorationImage(
+                        image: AssetImage('assets/images/logo/logo.png'),
+                        fit: BoxFit.cover,
+                        scale: .5),
                   ),
                 ),
-              ),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: <Widget>[
-                Text(localizations.keepConnection),
-                Checkbox(
-                  value: context.watch<AuthProvider>().keepLogged,
-                  onChanged: _toggleKeepLogged,
+                if (context.read<AuthProvider>()
+                        .hasFingerPrints() &&
+                    context.watch<AuthProvider>().emails.isNotEmpty)
+                  ExistingAccount(
+                    onTap: (String email) => _autoLogIn(email),
+                    onLongPressed: (String email) => _removeAccount(email),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: TextField(
+                    controller: emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        labelText: localizations.email,
+                        hintText: localizations.insert_email),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: TextField(
+                    controller: passwordController,
+                    keyboardType: TextInputType.text,
+                    obscureText: _obscureText,
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      labelText: "Password",
+                      hintText: localizations.insertPassword,
+                      suffixIcon: InkWell(
+                        onTap: _togglePasswordVisibility,
+                        child: Icon(
+                          _obscureText
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Row(
+                //   mainAxisAlignment: MainAxisAlignment.end,
+                //   children: <Widget>[
+                //     Text(localizations.keepConnection),
+                //     Checkbox(
+                //       value: context.watch<AuthProvider>().keepLogged,
+                //       onChanged: _toggleKeepLogged,
+                //     ),
+                //   ],
+                // ),
+                Padding(
+                  padding:
+                      const EdgeInsets.only(bottom: 15, left: 15, right: 15),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: RichText(
+                      text: TextSpan(
+                        text: localizations.ifNoAccount,
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.secondary),
+                        children: [
+                          TextSpan(
+                            text: " ${localizations.here}.",
+                            style: const TextStyle(color: Colors.blueAccent),
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = () async {
+                                Uri url = Uri(
+                                    scheme: dotenv.get('HTTP_SCHEMA'),
+                                    host: dotenv.get('VUE_HOST'),
+                                    path: '/');
+                                if (await canLaunchUrl(url)) {
+                                  launchUrl(url);
+                                }
+                              },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Container(
+                  height: 43,
+                  width: 170,
+                  decoration: BoxDecoration(
+                      color: Colors.blue,
+                      borderRadius: BorderRadius.circular(20)),
+                  child: TextButton(
+                    onPressed: () {
+                      logIn();
+                    },
+                    child: Text(
+                      localizations.logIn,
+                      style: const TextStyle(color: Colors.white, fontSize: 22),
+                    ),
+                  ),
                 ),
               ],
             ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 15, left: 15, right: 15),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: RichText(
-                  text: TextSpan(
-                    text: localizations.ifNoAccount,
-                    children: [
-                      TextSpan(
-                        text: " ${localizations.here}.",
-                        style: const TextStyle(color: Colors.blueAccent),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () async {
-                            Uri url = Uri(
-                                scheme: dotenv.get('SCHEMA'),
-                                host: dotenv.get('VUE_HOST'),
-                                path: '/');
-                            if (await canLaunchUrl(url)) {
-                              launchUrl(url);
-                            }
-                          },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Container(
-              height: 43,
-              width: 170,
-              decoration: BoxDecoration(
-                  color: Colors.blue, borderRadius: BorderRadius.circular(20)),
-              child: TextButton(
-                onPressed: () {
-                  logIn();
-                },
-                child: Text(
-                  localizations.logIn,
-                  style: const TextStyle(color: Colors.white, fontSize: 22),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

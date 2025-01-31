@@ -20,15 +20,17 @@ class LoadingScreen extends StatelessWidget {
       return;
     }
 
+    /// HANDLE BACKEND LOGIC
+
     HttpEntry ping = HttpRequests().ping(
       responseListener: (response) {
+        authProvider.setSessionToken(newSessionToken: response['data']);
         authProvider.setLoginState(newLoginState: 2);
       },
       errorListener: (response) {
         if (response != null && response.containsKey('status')) {
           authProvider.setToken(newToken: "");
-          authProvider.showSnackBar("Token scaduto");
-
+          authProvider.showSnackBar("Token expired");
           authProvider.setLoginState(newLoginState: 1);
         } else {
           authProvider.setLoginState(newLoginState: 1);
@@ -36,25 +38,41 @@ class LoadingScreen extends StatelessWidget {
       },
     );
 
-    authProvider.sendRequest(ping, context);
+    authProvider.sendRequest(ping);
   }
 
   @override
   Widget build(BuildContext context) {
-    //pingServer(context);
     return Scaffold(
         body: FutureBuilder(
             future: pingServer(context),
             builder: (context, snapshot) {
-              return Center(
-                  child: Image.asset(
-                'assets/images/logo/logo.png',
+              return Container(
                 color: Colors.black,
-              ));
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Align(
+                        alignment: Alignment.center,
+                        child: Image.asset(
+                          'assets/images/logo/logo.png',
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const Positioned(
+                      bottom: 20,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: Colors.blueAccent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
             }));
   }
 }
-
-        // body: FutureBuilder(
-        //   future: pingServer(),
-        //   child: Center(child: Image.asset('assets/images/logo/logo.png'))));

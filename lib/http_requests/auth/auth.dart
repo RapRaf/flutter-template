@@ -1,13 +1,24 @@
+import 'dart:convert';
+
 import 'package:flutter_template/models/http_request.dart';
 
 class HttpRequests {
-  HttpEntry logOut(
-      {required Function responseListener, required Function errorListener}) {
+  HttpEntry logIn(
+      {required Function responseListener,
+      required String email,
+      required String password}) {
     return HttpEntry(
         method: 'POST',
-        path: 'app/logout',
-        responseListener: (response) => responseListener(response),
-        errorListener: (response) => errorListener(response));
+        path: 'login',
+        body: jsonEncode({'email': email, 'password': password}),
+        responseListener: (response) => responseListener(response));
+  }
+
+  HttpEntry logOut({required Function responseListener}) {
+    return HttpEntry(
+        method: 'POST',
+        path: 'logout',
+        responseListener: (response) => responseListener(response));
   }
 
   HttpEntry ping(

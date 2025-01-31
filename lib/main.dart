@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_template/app.dart';
 import 'package:flutter_template/providers/auth_provider.dart';
@@ -6,6 +7,7 @@ import 'package:provider/provider.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   dotenv.load(fileName: "lib/.env").then((_) {
     final authProvider = AuthProvider();
 
@@ -18,9 +20,13 @@ void main() {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return _splashScreen();
             } else if (snapshot.hasError) {
-              return _splashScreen();
+              return _unsupportedScreen();
             } else {
-              return const MyApp();
+              if (snapshot.data != null && snapshot.data == true) {
+                return const MyApp();
+              } else {
+                return _unsupportedScreen();
+              }
             }
           },
         ),
@@ -30,9 +36,23 @@ void main() {
 }
 
 Widget _splashScreen() {
-  return Center(
-      child: Image.asset(
-    'assets/images/logo/logo.png',
+  return Container(
     color: Colors.black,
-  ));
+    child: Center(
+        child: Image.asset(
+      'assets/images/logo/logo.png',
+      color: Colors.white,
+    )),
+  );
+}
+
+Widget _unsupportedScreen() {
+  return Container(
+    color: Colors.black,
+    child: const Center(
+        child: Text(
+      "Something went wrong, try restarting the application. If the error persists it is because your device is not supported.",
+      style: TextStyle(color: Colors.white),
+    )),
+  );
 }

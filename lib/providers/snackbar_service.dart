@@ -7,15 +7,6 @@ class SnackBarService {
   SnackBarService({required this.authProvider});
 
   SnackBar snackbar(dynamic message) {
-    String label = "Close";
-    switch (authProvider.language.split(',')[0]) {
-      case 'it':
-        label = "Chiudi";
-        break;
-      case 'en':
-        label = "Close";
-      default:
-    }
     return SnackBar(
       backgroundColor: Colors.blueAccent,
       duration: const Duration(seconds: 5),
@@ -28,7 +19,7 @@ class SnackBarService {
         style: const TextStyle(fontSize: 16),
       ),
       action: SnackBarAction(
-          label: label,
+          label: "Close",
           onPressed: () => authProvider.scaffoldMessengerKey.currentState
               ?.removeCurrentSnackBar()),
     );

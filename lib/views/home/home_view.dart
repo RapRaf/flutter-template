@@ -16,7 +16,7 @@ class _HomeState extends State<Home> {
         child: IconButton(
             onPressed: () {
               Provider.of<AuthProvider>(context, listen: false)
-                  .showSnackBar('Eccoci');
+                  .showSnackBar('Snackbar works');
             },
             icon: const Icon(Icons.logout)));
   }
