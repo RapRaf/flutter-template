@@ -25,8 +25,30 @@ This template includes two main ChangeNotifier classes for managing app state an
 
 - `AppProvider` is mounted lower in the widget tree and is activated once the login is successful and all necessary data is fetched and ready for use.
 
-## GENERATE LOCALIZATIONS
+## SETUP
+```bash
+cp .env.example .env
+```
+Adjust ENV variables and get dependencies
+```bash
+flutter pub get
+```
+
+## GENERATE LOCALIZED TEXTS
+Edit the *.arb files in ```./lib/localization/```
+
+Once languages are defined run 
+```bash
 flutter pub add intl:any
+```
+to generate dart files and use it like this:
+```flutter
+import 'package:flutter_template/localization/app_localizations.dart';
+
+print(AppLocalizations.of(context)!.click_to_add)
+```
+
+
 
 ## Contributing
 

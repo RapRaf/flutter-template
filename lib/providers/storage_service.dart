@@ -356,7 +356,6 @@ class StorageService {
       'type': build.type,
       'isPhysicalDevice': build.isPhysicalDevice,
       'systemFeatures': build.systemFeatures,
-      'serialNumber': build.serialNumber,
       'isLowRamDevice': build.isLowRamDevice,
     };
   }

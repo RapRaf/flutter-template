@@ -1,4 +1,4 @@
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:flutter_template/localization/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_template/providers/app_provider.dart';
 import 'package:flutter_template/views/home/home_view.dart';

@@ -7,11 +7,10 @@ import 'package:flutter_template/views/loading_screen.dart';
 import 'package:flutter_template/views/main_activity.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:flutter_template/localization/app_localizations.dart';
 
 late bool isLarge;
 late double width, height;
-
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -38,8 +37,7 @@ class _MyHomePageState extends State<MyHomePage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       authProvider = context.read<AuthProvider>();
-      appProvider =
-          AppProvider(authProvider: authProvider);
+      appProvider = AppProvider(authProvider: authProvider);
 
       _setScreenOrientation();
     });
@@ -67,6 +65,7 @@ class _MyHomePageState extends State<MyHomePage> {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => appProvider),
+
         /// Add providers if needed
       ],
       child: Selector<AuthProvider, ThemeMode>(
@@ -77,7 +76,9 @@ class _MyHomePageState extends State<MyHomePage> {
                     MediaQuery.of(context).platformBrightness ==
                         Brightness.dark);
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              authProvider.setDark(isDarkMode);
+              if (authProvider.isDark != isDarkMode) {
+                authProvider.setDark(isDarkMode);
+              }
             });
             return MaterialApp(
               scaffoldMessengerKey: authProvider.scaffoldMessengerKey,
@@ -94,12 +95,28 @@ class _MyHomePageState extends State<MyHomePage> {
               locale: locale,
               debugShowCheckedModeBanner: false,
               theme: ThemeData(
+                brightness: Brightness.light,
+                fontFamily: 'Lexend',
+                textTheme: ThemeData.light().textTheme.apply(
+                      fontFamily: 'Lexend',
+                    ),
                 textSelectionTheme: const TextSelectionThemeData(
                   selectionColor: Colors.lightBlueAccent,
                   selectionHandleColor: Colors.blueAccent,
                 ),
               ),
-              darkTheme: ThemeData.dark(),
+              darkTheme: ThemeData(
+                brightness: Brightness.dark,
+                fontFamily: 'Lexend', // Apply font to dark mode
+                textTheme: ThemeData.dark().textTheme.apply(
+                      fontFamily:
+                          'Lexend', // Force Material 3 textTheme in dark mode
+                    ),
+                textSelectionTheme: const TextSelectionThemeData(
+                  selectionColor: Colors.lightBlueAccent,
+                  selectionHandleColor: Colors.blueAccent,
+                ),
+              ),
               themeMode: authProvider.theme,
               home: _getBody(),
             );
@@ -107,7 +124,7 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  _getBody() {
+  Widget _getBody() {
     switch (authProvider.loginState) {
       case 0:
         return const LoadingScreen();

@@ -1,5 +1,5 @@
 import 'package:flutter/gestures.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:flutter_template/localization/app_localizations.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_template/components/existing_accounts.dart';
 import 'package:flutter_template/http_requests/auth/auth.dart';
@@ -123,8 +123,7 @@ class AccessViewState extends State<AccessView> {
                         scale: .5),
                   ),
                 ),
-                if (context.read<AuthProvider>()
-                        .hasFingerPrints() &&
+                if (context.read<AuthProvider>().hasFingerPrints() &&
                     context.watch<AuthProvider>().emails.isNotEmpty)
                   ExistingAccount(
                     onTap: (String email) => _autoLogIn(email),
