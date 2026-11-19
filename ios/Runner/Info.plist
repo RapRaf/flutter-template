@@ -53,6 +53,6 @@
 		<key>UIStatusBarHidden</key>
 		<false />
 		<key>NSFaceIDUsageDescription</key>
-		<string>Why is my app authenticating using face id?</string>
+		<string>Face ID is used to quickly and securely sign in to your saved accounts.</string>
 	</dict>
 </plist>

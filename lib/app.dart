@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_template/localization/app_localizations.dart';
 import 'package:flutter_template/providers/app_provider.dart';
 import 'package:flutter_template/providers/auth_provider.dart';
 import 'package:flutter_template/views/access_page.dart';
 import 'package:flutter_template/views/loading_screen.dart';
 import 'package:flutter_template/views/main_activity.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_template/localization/app_localizations.dart';
 
-late bool isLarge;
-late double width, height;
+/// Shortest side above which the device is treated as a tablet.
+const double largeScreenBreakpoint = 600;
+
+/// `true` on tablets / large screens.
+bool isLargeScreen(BuildContext context) =>
+    MediaQuery.sizeOf(context).shortestSide > largeScreenBreakpoint;
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -29,126 +33,88 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  late AuthProvider authProvider;
-  late AppProvider appProvider;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      authProvider = context.read<AuthProvider>();
-      appProvider = AppProvider(authProvider: authProvider);
-
-      _setScreenOrientation();
+      if (mounted) _setScreenOrientation();
     });
   }
 
   @override
-  dispose() {
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeRight,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
+  void dispose() {
+    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    authProvider = context.watch<AuthProvider>();
-    final languageParts = authProvider.language.split(',');
-    Locale locale = languageParts.length == 2
-        ? Locale(languageParts[0], languageParts[1])
-        : const Locale('en', 'US');
+    // Rebuild only when these values change, not on every AuthProvider update.
+    final themeMode = context.select<AuthProvider, ThemeMode>((p) => p.theme);
+    final locale = context.select<AuthProvider, Locale>((p) => p.locale);
+    final loginState = context.select<AuthProvider, LoginState>(
+      (p) => p.loginState,
+    );
+    final messengerKey = context.read<AuthProvider>().scaffoldMessengerKey;
 
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => appProvider),
+        ChangeNotifierProxyProvider<AuthProvider, AppProvider>(
+          create: (context) =>
+              AppProvider(authProvider: context.read<AuthProvider>()),
+          update: (_, auth, app) => app!.update(auth),
+        ),
 
         /// Add providers if needed
       ],
-      child: Selector<AuthProvider, ThemeMode>(
-          selector: (_, provider) => provider.theme,
-          builder: (context, theme, child) {
-            final isDarkMode = theme == ThemeMode.dark ||
-                (theme == ThemeMode.system &&
-                    MediaQuery.of(context).platformBrightness ==
-                        Brightness.dark);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (authProvider.isDark != isDarkMode) {
-                authProvider.setDark(isDarkMode);
-              }
-            });
-            return MaterialApp(
-              scaffoldMessengerKey: authProvider.scaffoldMessengerKey,
-              localizationsDelegates: const [
-                AppLocalizations.delegate,
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-              ],
-              supportedLocales: const [
-                Locale('en', 'US'),
-                Locale('it', 'IT'),
-              ],
-              locale: locale,
-              debugShowCheckedModeBanner: false,
-              theme: ThemeData(
-                brightness: Brightness.light,
-                fontFamily: 'Lexend',
-                textTheme: ThemeData.light().textTheme.apply(
-                      fontFamily: 'Lexend',
-                    ),
-                textSelectionTheme: const TextSelectionThemeData(
-                  selectionColor: Colors.lightBlueAccent,
-                  selectionHandleColor: Colors.blueAccent,
-                ),
-              ),
-              darkTheme: ThemeData(
-                brightness: Brightness.dark,
-                fontFamily: 'Lexend', // Apply font to dark mode
-                textTheme: ThemeData.dark().textTheme.apply(
-                      fontFamily:
-                          'Lexend', // Force Material 3 textTheme in dark mode
-                    ),
-                textSelectionTheme: const TextSelectionThemeData(
-                  selectionColor: Colors.lightBlueAccent,
-                  selectionHandleColor: Colors.blueAccent,
-                ),
-              ),
-              themeMode: authProvider.theme,
-              home: _getBody(),
-            );
-          }),
+      child: MaterialApp(
+        scaffoldMessengerKey: messengerKey,
+        onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: locale,
+        debugShowCheckedModeBanner: false,
+        theme: _buildTheme(Brightness.light),
+        darkTheme: _buildTheme(Brightness.dark),
+        themeMode: themeMode,
+        home: _getBody(loginState),
+      ),
     );
   }
 
-  Widget _getBody() {
-    switch (authProvider.loginState) {
-      case 0:
+  ThemeData _buildTheme(Brightness brightness) {
+    return ThemeData(
+      brightness: brightness,
+      fontFamily: 'Lexend',
+      textSelectionTheme: const TextSelectionThemeData(
+        selectionColor: Colors.lightBlueAccent,
+        selectionHandleColor: Colors.blueAccent,
+      ),
+    );
+  }
+
+  Widget _getBody(LoginState loginState) {
+    switch (loginState) {
+      case LoginState.loading:
         return const LoadingScreen();
-      case 1:
+      case LoginState.loggedOut:
         return const AccessView();
-      case 2:
+      case LoginState.loggedIn:
         return const MainActivity();
-      default:
-        return const AccessView();
     }
   }
 
+  /// Tablets: landscape only. Phones: portrait only.
   void _setScreenOrientation() {
-    width = MediaQuery.of(context).size.width;
-    height = MediaQuery.of(context).size.height;
-    double minSize = width < height ? width : height;
-
-    if (minSize > 600) {
-      isLarge = true;
-      SystemChrome.setPreferredOrientations(
-          [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
-    } else {
-      isLarge = false;
-      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-    }
+    SystemChrome.setPreferredOrientations(
+      isLargeScreen(context)
+          ? [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+          : [DeviceOrientation.portraitUp],
+    );
   }
 }

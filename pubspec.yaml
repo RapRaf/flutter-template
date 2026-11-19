@@ -1,5 +1,5 @@
 name: flutter_template
-description: "A new Flutter project."
+description: "Flutter template with auth, theming, localization and an HTTP request queue."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
@@ -19,7 +19,8 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 version: 0.0.1+1
 
 environment:
-  sdk: ">=3.4.1 <4.0.0"
+  sdk: ">=3.11.0 <4.0.0"
+  flutter: ">=3.41.6"
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -33,18 +34,18 @@ dependencies:
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.6
-  provider: ^6.1.2
-  flutter_secure_storage: ^9.2.2
-  http: ^1.2.1
+  cupertino_icons: ^1.0.9
+  provider: ^6.1.5+1
+  flutter_secure_storage: ^11.2.0
+  http: ^1.6.0
   flutter_localizations:
     sdk: flutter
-  intl: any
-  flutter_dotenv: ^6.0.0
-  url_launcher: ^6.2.6
-  local_auth: ^2.2.0
-  uuid: ^4.5.1
-  device_info_plus: ^12.1.0
+  intl: ^0.20.2
+  flutter_dotenv: ^6.0.2
+  url_launcher: ^6.3.3
+  local_auth: ^3.0.2
+  uuid: ^4.6.0
+  device_info_plus: ^13.3.0
 
 dev_dependencies:
   flutter_test:
@@ -95,9 +96,9 @@ flutter:
   assets:
     - assets/images/logo/
     - assets/images/flags/
+    # NOTE: everything in this file is bundled in plain text inside the app.
+    # Never put secrets here (API keys, passwords...), only public config.
     - lib/.env
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
 
 flutter_icons:
   android: true

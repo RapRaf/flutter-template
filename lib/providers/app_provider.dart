@@ -1,28 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_template/providers/auth_provider.dart';
 
+/// State of the logged-in part of the app.
+///
+/// It is reset every time the user leaves [LoginState.loggedIn] (see
+/// [update]): put here the data that belongs to the user session and clear it
+/// in [_reset].
 class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
-  int currentPage = 0;
-  AuthProvider authProvider;
+  AuthProvider _authProvider;
+  int _currentPage = 0;
   bool _disposed = false;
 
-  AppProvider({required this.authProvider}) {
+  AppProvider({required AuthProvider authProvider})
+    : _authProvider = authProvider {
     WidgetsBinding.instance.addObserver(this);
   }
 
-  void mNotifyListener() {
-    notifyListeners();
+  AuthProvider get authProvider => _authProvider;
+
+  /// Selected tab of `MainActivity`.
+  int get currentPage => _currentPage;
+
+  void changeCurrentPageState({required int newCurrentPageState}) {
+    if (_currentPage == newCurrentPageState) return;
+    _currentPage = newCurrentPageState;
+    _notify();
   }
 
-  void changeCurrentPageState({
-    required int newCurrentPageState,
-  }) async {
-    currentPage = newCurrentPageState;
-    notifyListeners();
+  /// Called by the `ChangeNotifierProxyProvider` whenever [AuthProvider]
+  /// changes. It runs during a build, so it must not notify.
+  AppProvider update(AuthProvider auth) {
+    _authProvider = auth;
+    if (auth.loginState != LoginState.loggedIn) _reset();
+    return this;
   }
 
-  void initProvider() {
-    currentPage = 0;
+  /// Clears the session data (without notifying).
+  void _reset() {
+    _currentPage = 0;
+  }
+
+  void _notify() {
+    if (!_disposed) notifyListeners();
   }
 
   @override
@@ -30,7 +49,10 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
     if (_disposed) return;
     if (state == AppLifecycleState.resumed) {
-    } else if (state == AppLifecycleState.paused) {}
+      // e.g. refresh data
+    } else if (state == AppLifecycleState.paused) {
+      // e.g. save drafts
+    }
   }
 
   @override

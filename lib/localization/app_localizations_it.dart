@@ -33,7 +33,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get dark_theme => 'Tema scuro';
 
   @override
-  String get ligth_theme => 'Tema chiaro';
+  String get light_theme => 'Tema chiaro';
 
   @override
   String get item_details => 'Dettagli oggetto';
@@ -170,4 +170,31 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get already_logged_in_with => 'Hai già eseguito l\'accesso con:';
+
+  @override
+  String get password => 'Password';
+
+  @override
+  String get unsupported_device =>
+      'Qualcosa è andato storto, prova a riavviare l\'applicazione. Se l\'errore persiste, il tuo dispositivo non è supportato.';
+
+  @override
+  String get session_expired =>
+      'Sessione scaduta, effettua di nuovo l\'accesso.';
+
+  @override
+  String get network_error =>
+      'Impossibile raggiungere il server. Controlla la connessione e riprova.';
+
+  @override
+  String get generic_error => 'Qualcosa è andato storto.';
+
+  @override
+  String get biometric_reason => 'Autenticati per accedere al tuo account';
+
+  @override
+  String get theme => 'Tema';
+
+  @override
+  String get language => 'Lingua';
 }

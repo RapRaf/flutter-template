@@ -1,81 +1,79 @@
-import 'package:flutter_template/localization/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_template/localization/app_localizations.dart';
 import 'package:flutter_template/providers/app_provider.dart';
 import 'package:flutter_template/views/home/home_view.dart';
 import 'package:flutter_template/views/home/orders_view.dart';
 import 'package:flutter_template/views/home/settings_view.dart';
 import 'package:provider/provider.dart';
 
-class MainActivity extends StatefulWidget {
+class MainActivity extends StatelessWidget {
   const MainActivity({super.key});
 
   @override
-  State<MainActivity> createState() => _MainActivityState();
-}
-
-class _MainActivityState extends State<MainActivity> {
-  @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context)!;
+    final navigators = _getNavigators(localizations);
+    final currentPage = context.select<AppProvider, int>(
+      (p) => p.currentPage.clamp(0, navigators.length - 1),
+    );
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.appTitle),
-        //shadowColor: Colors.white,
-        elevation: 1,
-      ),
+      appBar: AppBar(title: Text(localizations.appTitle), elevation: 1),
       body: IndexedStack(
-        index: context.watch<AppProvider>().currentPage,
-        children: [..._getNavigators().map((navItem) => navItem.page)],
+        index: currentPage,
+        children: [for (final navItem in navigators) navItem.page],
       ),
       bottomNavigationBar: BottomNavigationBar(
         selectedItemColor: Colors.blueAccent,
-        currentIndex: context.watch<AppProvider>().currentPage,
-        onTap: _onItemTapped,
-        items: _getNavigators().map((navItem) {
-          return BottomNavigationBarItem(
-            icon: Icon(navItem.icon),
-            label: navItem.label,
-          );
-        }).toList(),
+        currentIndex: currentPage,
+        onTap: (index) => context.read<AppProvider>().changeCurrentPageState(
+          newCurrentPageState: index,
+        ),
+        items: [
+          for (final navItem in navigators)
+            BottomNavigationBarItem(
+              icon: Icon(navItem.icon),
+              label: navItem.label,
+            ),
+        ],
       ),
     );
   }
 
-  List<NavigationItems> _getNavigators() {
+  List<NavigationItems> _getNavigators(AppLocalizations localizations) {
     return [
       NavigationItems(
-          label: AppLocalizations.of(context)!.home,
-          icon: Icons.home,
-          page: const Home(),
-          privilege: 0),
+        label: localizations.home,
+        icon: Icons.home,
+        page: const Home(),
+        privilege: 0,
+      ),
       NavigationItems(
-          label: AppLocalizations.of(context)!.orders,
-          icon: Icons.reorder,
-          page: const Orders(),
-          privilege: 0),
+        label: localizations.orders,
+        icon: Icons.reorder,
+        page: const Orders(),
+        privilege: 0,
+      ),
       NavigationItems(
-          label: AppLocalizations.of(context)!.settings,
-          icon: Icons.settings,
-          page: const Settings(),
-          privilege: 0)
+        label: localizations.settings,
+        icon: Icons.settings,
+        page: const Settings(),
+        privilege: 0,
+      ),
     ];
-  }
-
-  void _onItemTapped(int index) {
-    context
-        .read<AppProvider>()
-        .changeCurrentPageState(newCurrentPageState: index);
   }
 }
 
 class NavigationItems {
-  String label;
-  IconData icon;
-  int privilege;
-  Widget page;
+  final String label;
+  final IconData icon;
+  final int privilege;
+  final Widget page;
 
-  NavigationItems(
-      {required this.label,
-      required this.icon,
-      required this.privilege,
-      required this.page});
+  const NavigationItems({
+    required this.label,
+    required this.icon,
+    required this.privilege,
+    required this.page,
+  });
 }

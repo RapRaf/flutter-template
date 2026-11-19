@@ -63,7 +63,7 @@ import 'app_localizations_it.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -86,16 +86,16 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
     Locale('en'),
-    Locale('it')
+    Locale('it'),
   ];
 
   /// The title of the application
@@ -146,11 +146,11 @@ abstract class AppLocalizations {
   /// **'Dark Theme'**
   String get dark_theme;
 
-  /// No description provided for @ligth_theme.
+  /// No description provided for @light_theme.
   ///
   /// In en, this message translates to:
   /// **'Light Theme'**
-  String get ligth_theme;
+  String get light_theme;
 
   /// No description provided for @item_details.
   ///
@@ -421,6 +421,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You are already logged in with:'**
   String get already_logged_in_with;
+
+  /// No description provided for @password.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get password;
+
+  /// No description provided for @unsupported_device.
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong, try restarting the application. If the error persists, your device is not supported.'**
+  String get unsupported_device;
+
+  /// No description provided for @session_expired.
+  ///
+  /// In en, this message translates to:
+  /// **'Session expired, please log in again.'**
+  String get session_expired;
+
+  /// No description provided for @network_error.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to reach the server. Check your connection and try again.'**
+  String get network_error;
+
+  /// No description provided for @generic_error.
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong.'**
+  String get generic_error;
+
+  /// No description provided for @biometric_reason.
+  ///
+  /// In en, this message translates to:
+  /// **'Authenticate to access your account'**
+  String get biometric_reason;
+
+  /// No description provided for @theme.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme'**
+  String get theme;
+
+  /// No description provided for @language.
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get language;
 }
 
 class _AppLocalizationsDelegate
@@ -450,8 +498,9 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
   }
 
   throw FlutterError(
-      'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }

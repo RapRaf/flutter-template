@@ -1,22 +1,24 @@
 import 'package:flutter/material.dart';
 
-class LanguageImage extends StatefulWidget {
-  const LanguageImage({super.key, required this.lang});
+/// Flag of a language, from `assets/images/flags/<CODE>.png`.
+class LanguageImage extends StatelessWidget {
+  const LanguageImage({super.key, required this.lang, this.width = 28});
+
   final String lang;
+  final double width;
 
-  @override
-  State<LanguageImage> createState() => _LanguageImageState();
-}
-
-class _LanguageImageState extends State<LanguageImage> {
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.all(10),
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
       child: SizedBox(
-          width: 37,
-          child: Image.asset(
-              'assets/images/flags/${widget.lang.toUpperCase()}.png')),
+        width: width,
+        child: Image.asset(
+          'assets/images/flags/${lang.toUpperCase()}.png',
+          // Missing flag: show nothing instead of an error.
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        ),
+      ),
     );
   }
 }

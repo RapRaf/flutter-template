@@ -1,52 +1,35 @@
-import 'package:flutter_template/localization/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_template/http_requests/auth/auth.dart';
-import 'package:flutter_template/models/http_request.dart';
+import 'package:flutter_template/localization/app_localizations.dart';
 import 'package:flutter_template/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 
-class LogoutButton extends StatefulWidget {
+class LogoutButton extends StatelessWidget {
   const LogoutButton({super.key});
 
-  @override
-  State<LogoutButton> createState() => _LogoutButtonState();
-}
-
-class _LogoutButtonState extends State<LogoutButton> {
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
+  Future<void> _showLogoutDialog(BuildContext context) async {
+    final localizations = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: Text(AppLocalizations.of(context)!.logout_confirmation),
-          content: Text(AppLocalizations.of(context)!.are_you_sure_logout),
+          title: Text(localizations.logout_confirmation),
+          content: Text(localizations.are_you_sure_logout),
           actions: <Widget>[
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text(AppLocalizations.of(context)!.cancel),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(localizations.cancel),
             ),
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _logout();
-              },
-              child: Text(AppLocalizations.of(context)!.logout),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(localizations.logout),
             ),
           ],
         );
       },
     );
-  }
-
-  void _logout() {
-    HttpEntry req = HttpRequests().logOut(
-        responseListener: (response) =>
-            Provider.of<AuthProvider>(context, listen: false)
-                .handleLogoutResponse());
-
-    Provider.of<AuthProvider>(context, listen: false).sendRequest(req);
+    if (confirmed == true && context.mounted) {
+      context.read<AuthProvider>().logout();
+    }
   }
 
   @override
@@ -55,7 +38,6 @@ class _LogoutButtonState extends State<LogoutButton> {
       padding: const EdgeInsets.all(10),
       child: TextButton(
         onPressed: () => _showLogoutDialog(context),
-        onLongPress: () => _showLogoutDialog(context),
         style: TextButton.styleFrom(
           backgroundColor: Colors.blueAccent,
           shape: RoundedRectangleBorder(

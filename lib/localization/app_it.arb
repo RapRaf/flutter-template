@@ -10,7 +10,7 @@
   "settings": "Impostazioni",
   "sys_theme": "Tema sistema",
   "dark_theme": "Tema scuro",
-  "ligth_theme": "Tema chiaro",
+  "light_theme": "Tema chiaro",
   "item_details": "Dettagli oggetto",
   "no_info_here": "Nessuna informazione qui",
   "logInApp": "Accedi a FlutterTemplate",
@@ -55,5 +55,13 @@
   "orders": "Ordini",
   "logout_confirmation": "Conferma disconnessione",
   "are_you_sure_logout": "Sei sicuro di volerti disconnettere?",
-  "already_logged_in_with": "Hai già eseguito l'accesso con:"
+  "already_logged_in_with": "Hai già eseguito l'accesso con:",
+  "password": "Password",
+  "unsupported_device": "Qualcosa è andato storto, prova a riavviare l'applicazione. Se l'errore persiste, il tuo dispositivo non è supportato.",
+  "session_expired": "Sessione scaduta, effettua di nuovo l'accesso.",
+  "network_error": "Impossibile raggiungere il server. Controlla la connessione e riprova.",
+  "generic_error": "Qualcosa è andato storto.",
+  "biometric_reason": "Autenticati per accedere al tuo account",
+  "theme": "Tema",
+  "language": "Lingua"
 }

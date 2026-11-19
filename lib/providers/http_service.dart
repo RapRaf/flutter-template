@@ -1,257 +1,374 @@
 import 'dart:async';
+import 'dart:collection';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_template/http_requests/auth/auth.dart';
 import 'package:flutter_template/models/http_request.dart';
 import 'package:flutter_template/providers/auth_provider.dart';
+import 'package:http/http.dart' as http;
 
+/// Serial queue of HTTP requests: one request in flight at a time, in order.
+///
+/// - Network errors / timeouts never block the queue: the request fails and
+///   the next one is sent.
+/// - `401` while logged in: if "keep logged" is enabled the user is logged in
+///   again automatically and the request retried once, otherwise the session
+///   is closed ([AuthProvider.handleSessionExpired]).
+/// - `403` while logged in: a new session token is requested and the request
+///   retried once.
+/// - A ping keeps the session alive after [TimerService.interval] of inactivity.
 class HttpService {
-  Map<String, HttpEntry> _requestList = {};
-  bool _sending = false;
-  int _requestCount = 0;
-  int _sendingIndex = 0;
+  final AuthProvider authProvider;
+  final http.Client? _client;
+
+  final ListQueue<HttpEntry> _queue = ListQueue<HttpEntry>();
+  final TimerService _timerService;
+  HttpEntry? _current;
   bool _isStopped = false;
+  bool _disposed = false;
+  bool _keepAliveInFlight = false;
+  int _tagCounter = 0;
 
-  AuthProvider authProvider;
-
-  bool get sending => _sending;
-
-  int get requestCount => _requestCount;
-
-  int get sendingIndex => _sendingIndex;
-
-  bool get isStopped => _isStopped;
-
-  late TimerService _timerService;
-
-  HttpService({required this.authProvider}) {
-    _timerService = TimerService();
-    _timerService.startTimer(_openSession);
+  HttpService({
+    required this.authProvider,
+    http.Client? client,
+    Duration keepAliveInterval = const Duration(minutes: 2),
+  }) : _client = client,
+       _timerService = TimerService(interval: keepAliveInterval) {
+    _timerService.startTimer(_keepSessionAlive);
   }
 
   // GETTERS
-  Map<String, HttpEntry> get requestList => _requestList;
 
+  /// `true` while a request is in flight.
+  bool get sending => _current != null;
+
+  /// Requests not completed yet (in flight + waiting).
+  int get requestCount => _queue.length + (sending ? 1 : 0);
+
+  bool get isStopped => _isStopped;
+
+  HttpEntry? get currentRequest => _current;
+
+  List<HttpEntry> get pendingRequests => List.unmodifiable(_queue);
+
+  // QUEUE CONTROL
+
+  /// Pauses the queue: the request in flight completes, the others wait.
   void stopQueue() {
     _isStopped = true;
-    authProvider.mNotifyListeners();
+    _notify();
   }
 
+  /// Drops the requests that have not been sent yet.
   void cleanQueue() {
-    if (!_isStopped) return;
-    _cleanQueue();
-    authProvider.mNotifyListeners();
+    _queue.clear();
+    _notify();
   }
 
   void startQueue() {
     _isStopped = false;
     _processNext();
+    _notify();
+  }
+
+  /// Drops everything, including the request in flight (its response will be
+  /// ignored), and restarts a stopped queue. Used on logout / session
+  /// expiration.
+  void reset() {
+    _queue.clear();
+    _current = null;
+    _isStopped = false;
+    _notify();
+  }
+
+  void dispose() {
+    _disposed = true;
+    _timerService.stopTimer();
+    _queue.clear();
+    _current = null;
   }
 
   void addToQueue({required HttpEntry httpEntry}) {
-    _requestCount++;
-
-    httpEntry.tag = _generateKey(httpEntry.path);
-
-    _requestList[httpEntry.tag] = httpEntry;
-
-    if (!_sending) {
-      _sending = true;
-      _sendRequest();
-    }
-    authProvider.mNotifyListeners();
+    if (_disposed) return;
+    httpEntry.tag = '${httpEntry.path}_${++_tagCounter}';
+    _queue.add(httpEntry);
+    _processNext();
+    _notify();
   }
 
-  void _sendRequest() {
-    HttpEntry? http = findRequestByIndex(_sendingIndex);
-    if (http == null) return;
+  // INTERNALS
 
-    HttpRequest req = HttpRequest(
-        tag: http.tag,
-        method: http.method,
-        path: http.path,
-        headers: getHeaders(),
-        body: http.body,
-        params: http.params,
-        managerResponse: _handleResponse);
-
-    req.send();
-    _timerService.resetTimer(_openSession);
+  void _processNext() {
+    if (_disposed || _isStopped || _current != null || _queue.isEmpty) return;
+    final next = _queue.removeFirst();
+    _current = next;
+    _send(next);
   }
 
-  void _handleResponse(String tag, int status, dynamic response,
-      Map<String, String> headers) async {
-    HttpEntry? http = findRequestByKey(tag);
-    if (http == null) {
-      _processNext();
-      return;
-    }
+  void _send(HttpEntry entry) {
+    _timerService.resetTimer(_keepSessionAlive);
+    HttpRequest(
+      tag: entry.tag,
+      method: entry.method,
+      path: entry.path,
+      headers: getHeaders(),
+      body: entry.body,
+      params: entry.params,
+      client: _client,
+      managerResponse: _handleResponse,
+    ).send();
+  }
+
+  void _retry(HttpEntry entry) {
+    if (_disposed || !identical(_current, entry)) return;
+    _send(entry);
+  }
+
+  bool get _loggedIn => authProvider.loginState == LoginState.loggedIn;
+
+  void _handleResponse(
+    String tag,
+    int status,
+    Map<String, dynamic> response,
+    Map<String, String> headers,
+  ) {
+    final entry = _current;
+    // Stale response (queue reset / disposed meanwhile): ignore it.
+    if (_disposed || entry == null || entry.tag != tag) return;
 
     if (status == 401) {
-      if (authProvider.keepLogged) {
-        _autoLogin();
-      } else {
-        if (!tag.contains('ping')) authProvider.initProvider();
+      _handleUnauthorized(entry, response, status);
+      return;
+    }
+
+    if (status == 403 && _loggedIn && entry.retries == 0) {
+      entry.retries++;
+      _openSession(
+        onSuccess: () => _retry(entry),
+        onFailure: () => _complete(entry, response, status),
+      );
+      return;
+    }
+
+    final httpOk = (status >= 200 && status < 300) || status == 422;
+    if (httpOk && response['status'] == true) {
+      parseHeaders(headers);
+      _complete(entry, response, status, success: true);
+      return;
+    }
+
+    _complete(entry, response, status);
+  }
+
+  void _handleUnauthorized(
+    HttpEntry entry,
+    Map<String, dynamic> response,
+    int status,
+  ) {
+    if (!_loggedIn) {
+      // e.g. wrong credentials on login, or expired token on the first ping.
+      _complete(entry, response, status);
+      return;
+    }
+
+    void expire() {
+      _complete(entry, response, status, showDefaultError: false);
+      authProvider.handleSessionExpired();
+    }
+
+    if (authProvider.keepLogged && entry.retries == 0) {
+      entry.retries++;
+      _autoLogin(onSuccess: () => _retry(entry), onFailure: expire);
+    } else {
+      expire();
+    }
+  }
+
+  /// Completes [entry], notifies its listener and moves to the next request.
+  void _complete(
+    HttpEntry entry,
+    Map<String, dynamic> response,
+    int status, {
+    bool success = false,
+    bool showDefaultError = true,
+  }) {
+    if (identical(_current, entry)) _current = null;
+    try {
+      if (success) {
+        entry.responseListener(response);
+      } else if (entry.errorListener != null) {
+        entry.errorListener!(response, status);
+      } else if (showDefaultError) {
+        returnError(response, status);
       }
-      returnError(http, response);
-      return;
+    } catch (exception, stack) {
+      // A failing listener must never block the queue.
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: exception,
+          stack: stack,
+          library: 'HttpService',
+        ),
+      );
     }
-
-    if (status == 403) {
-      _openSession();
-      return;
-    }
-
-    if (status < 300 || status == 422) {
-      if (response['status'] == true) {
-        parseHeaders(headers);
-
-        http.responseListener(response);
-        _processNext();
-      } else {
-        returnError(http, response);
-      }
-      return;
-    }
-    returnError(http, response);
-    return;
+    _processNext();
+    _notify();
   }
 
-  void _openSession() {
-    if (authProvider.loginState != 2) return;
-    HttpEntry sessionEntry =
-        HttpRequests().ping(responseListener: () {}, errorListener: () {});
-    HttpRequest req = HttpRequest(
-        tag: "auto",
-        method: sessionEntry.method,
-        path: sessionEntry.path,
-        headers: getHeaders(),
-        managerResponse: _handleSessionResponse);
-
-    req.send();
+  /// Default error handling when a request has no `errorListener`.
+  void returnError(Map<String, dynamic> response, int status) {
+    if (status == HttpRequest.networkErrorStatus) {
+      authProvider.showSnackBar(authProvider.localizations.network_error);
+    } else if (response['data'] != null || response['message'] != null) {
+      authProvider.showSnackBar(response);
+    }
   }
 
-  void _handleSessionResponse(
-      String tag, int status, dynamic response, Map<String, String> headers) {
-    if (status != 200 || !response['status']) {
-      authProvider.initProvider();
+  void _keepSessionAlive() {
+    if (_disposed || _keepAliveInFlight || sending || !_loggedIn) return;
+    _keepAliveInFlight = true;
+    _openSession(
+      onSuccess: () => _keepAliveInFlight = false,
+      onFailure: () => _keepAliveInFlight = false,
+    );
+  }
+
+  /// Asks the server for a new session token.
+  void _openSession({VoidCallback? onSuccess, VoidCallback? onFailure}) {
+    if (_disposed || !_loggedIn) {
+      onFailure?.call();
+      return;
+    }
+    final ping = HttpRequests().ping(
+      responseListener: (_) {},
+      errorListener: (_, _) {},
+    );
+    HttpRequest(
+      tag: 'session',
+      method: ping.method,
+      path: ping.path,
+      headers: getHeaders(),
+      client: _client,
+      managerResponse: (tag, status, response, headers) {
+        if (_disposed) return;
+        final ok = status >= 200 && status < 300 && response['status'] == true;
+        if (ok) {
+          final sessionToken = response['data'];
+          if (sessionToken is String) {
+            authProvider.setSessionToken(newSessionToken: sessionToken);
+          }
+          onSuccess?.call();
+          return;
+        }
+        onFailure?.call();
+        // Network errors are ignored: only an explicit refusal closes the session.
+        if ((status == 401 || status == 403) && _loggedIn) {
+          authProvider.handleSessionExpired();
+        }
+      },
+    ).send();
+  }
+
+  Future<void> _autoLogin({
+    required VoidCallback onSuccess,
+    required VoidCallback onFailure,
+  }) async {
+    final email = authProvider.currentMail;
+    final password = email.isEmpty
+        ? null
+        : await authProvider.getPassword(email);
+    if (_disposed) return;
+    if (password == null || password.isEmpty) {
+      onFailure();
       return;
     }
 
-    authProvider.setSessionToken(newSessionToken: response['data']);
-    if (_requestList.isNotEmpty) _sendRequest();
-  }
-
-  void _autoLogin() async {
-    await authProvider
-        .getPassword(authProvider.currentMail)
-        .then((String? pass) {
-      if (pass != null && pass.isNotEmpty) {
-        HttpEntry loginEntry = HttpRequests().logIn(
-            responseListener: (response) {},
-            email: authProvider.currentMail,
-            password: pass);
-        HttpRequest req = HttpRequest(
-            tag: "auto",
-            method: loginEntry.method,
-            path: loginEntry.path,
-            headers: getHeaders(),
-            body: loginEntry.body,
-            managerResponse: _handleLoginResponse);
-
-        req.send();
-      }
-    });
-  }
-
-  void _handleLoginResponse(String tag, int status, dynamic response,
-      Map<String, String> headers) async {
-    if (status != 200 || !response['status']) {
-      authProvider.initProvider();
-      return;
-    }
-
-    authProvider.setToken(newToken: response['data']['token']);
-    if (_requestList.isNotEmpty) _sendRequest();
+    final login = HttpRequests().logIn(
+      responseListener: (_) {},
+      email: email,
+      password: password,
+    );
+    HttpRequest(
+      tag: 'auto-login',
+      method: login.method,
+      path: login.path,
+      headers: getHeaders(),
+      body: login.body,
+      client: _client,
+      managerResponse: (tag, status, response, headers) {
+        if (_disposed) return;
+        final data = response['data'];
+        final token = data is Map ? data['token'] : null;
+        final ok =
+            status >= 200 &&
+            status < 300 &&
+            response['status'] == true &&
+            token is String &&
+            token.isNotEmpty;
+        if (ok) {
+          authProvider.setToken(newToken: token);
+          onSuccess();
+        } else {
+          onFailure();
+        }
+      },
+    ).send();
   }
 
   void parseHeaders(Map<String, String> headers) {
-    if (headers['notify'] != null && headers['notify']!.isNotEmpty) {
-      authProvider.setLastUpdate(
-          lastUpdate: int.tryParse(headers['notify']!) ?? 0);
+    final notify = headers['notify'];
+    if (notify != null && notify.isNotEmpty) {
+      final lastUpdate = int.tryParse(notify);
+      if (lastUpdate != null) {
+        authProvider.setLastUpdate(lastUpdate: lastUpdate);
+      }
     }
-    if (headers['session-token'] != null &&
-        headers['session-token']!.isNotEmpty) {
-      authProvider.setSessionToken(newSessionToken: headers['session-token']!);
+    final sessionToken = headers['session-token'];
+    if (sessionToken != null && sessionToken.isNotEmpty) {
+      authProvider.setSessionToken(newSessionToken: sessionToken);
     }
-  }
-
-  void _processNext() {
-    if (_isStopped) return;
-    _sendingIndex++;
-    if (_requestCount <= _sendingIndex) {
-      _cleanQueue();
-      _sending = false;
-      authProvider.mNotifyListeners();
-      return;
-    }
-    authProvider.mNotifyListeners();
-    _sendRequest();
-  }
-
-  void _cleanQueue() {
-    _requestList = {};
-    _requestCount = 0;
-    _sendingIndex = 0;
   }
 
   Map<String, String> getHeaders() {
+    final userId = authProvider.userId;
     return {
-      'Authorization': 'Bearer ${authProvider.token}',
       'Content-Type': 'application/json',
-      'User-Agent': 'FlutterTemplate|${authProvider.model}|${authProvider.userId ?? "0"}',
+      'Accept': 'application/json',
+      'User-Agent':
+          'FlutterTemplate|${authProvider.model}|${userId.isEmpty ? "0" : userId}',
       'Device-Id': authProvider.id,
-      'Session-Token': authProvider.sessionToken
+      if (authProvider.token.isNotEmpty)
+        'Authorization': 'Bearer ${authProvider.token}',
+      if (authProvider.sessionToken.isNotEmpty)
+        'Session-Token': authProvider.sessionToken,
     };
   }
 
-  String _generateKey(String path) {
-    // UNIQUE KEY FOR OUTGOING HTTP REQUESTS
-    return '${path}_$_requestCount';
-  }
-
-  HttpEntry? findRequestByKey(String key) {
-    return _requestList[key];
-  }
-
-  HttpEntry? findRequestByIndex(int index) {
-    String key = _requestList.keys.toList()[index]; // GET KEY AT INDEX
-    return _requestList[key];
-  }
-
-  void returnError(HttpEntry http, dynamic response) {
-    if (http.errorListener != null) {
-      http.errorListener!(response);
-    } else if (response != null && response['data'] != null) {
-      authProvider.showSnackBar(response);
-    }
-    _processNext();
+  /// Notifies after the current frame/task, so that adding a request from
+  /// `build`/`initState` never triggers "notifyListeners during build".
+  void _notify() {
+    scheduleMicrotask(() {
+      if (!_disposed) authProvider.mNotifyListeners();
+    });
   }
 }
 
 class TimerService {
+  final Duration interval;
   Timer? _timer;
-  Duration interval = const Duration(minutes: 2);
+
+  TimerService({this.interval = const Duration(minutes: 2)});
 
   void startTimer(void Function() callback) {
-    _timer = Timer.periodic(interval, (Timer t) => callback());
+    _timer?.cancel();
+    _timer = Timer.periodic(interval, (_) => callback());
   }
 
-  void resetTimer(void Function() callback) {
-    _timer?.cancel();
-    _timer = Timer.periodic(interval, (Timer t) => callback());
-  }
+  void resetTimer(void Function() callback) => startTimer(callback);
 
   void stopTimer() {
     _timer?.cancel();
+    _timer = null;
   }
 }

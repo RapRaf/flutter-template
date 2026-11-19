@@ -1,14 +1,17 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 
+/// Device authentication (fingerprint, face, PIN...) through `local_auth`.
 class FingerprintService {
-  final LocalAuthentication auth = LocalAuthentication();
+  final LocalAuthentication auth;
   bool _isSupported = false;
   bool? _canCheckBiometrics;
   List<BiometricType>? _availableBiometrics;
   bool _authorized = false;
   bool _isAuthenticating = false;
+
+  /// Completes when [isSupported] holds the real value.
   late final Future<void> initialization;
 
   bool? get canCheckBiometrics => _canCheckBiometrics;
@@ -17,85 +20,82 @@ class FingerprintService {
   bool get authorized => _authorized;
   bool get isAuthenticating => _isAuthenticating;
 
-  FingerprintService() {
-    auth.isDeviceSupported().then(
-          (bool isSupported) => _isSupported = isSupported,
-        );
+  FingerprintService({LocalAuthentication? localAuthentication})
+    : auth = localAuthentication ?? LocalAuthentication() {
+    initialization = _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      _isSupported = await auth.isDeviceSupported();
+    } catch (e) {
+      // MissingPluginException on unsupported platforms / tests.
+      _isSupported = false;
+      debugPrint('local_auth unavailable: $e');
+    }
   }
 
   Future<void> checkBiometrics() async {
-    late bool canCheckBiometrics;
     try {
-      canCheckBiometrics = await auth.canCheckBiometrics;
+      _canCheckBiometrics = await auth.canCheckBiometrics;
+    } on LocalAuthException catch (e) {
+      _canCheckBiometrics = false;
+      debugPrint(e.toString());
     } on PlatformException catch (e) {
-      canCheckBiometrics = false;
+      _canCheckBiometrics = false;
       debugPrint(e.toString());
     }
-
-    _canCheckBiometrics = canCheckBiometrics;
   }
 
   Future<void> getAvailableBiometrics() async {
-    late List<BiometricType> availableBiometrics;
     try {
-      availableBiometrics = await auth.getAvailableBiometrics();
+      _availableBiometrics = await auth.getAvailableBiometrics();
+    } on LocalAuthException catch (e) {
+      _availableBiometrics = <BiometricType>[];
+      debugPrint(e.toString());
     } on PlatformException catch (e) {
-      availableBiometrics = <BiometricType>[];
+      _availableBiometrics = <BiometricType>[];
       debugPrint(e.toString());
     }
-
-    _availableBiometrics = availableBiometrics;
   }
 
-  Future<bool> authenticate() async {
-    bool authenticated = false;
+  /// Lets the OS choose the method (biometrics or device PIN/pattern).
+  Future<bool> authenticate({required String localizedReason}) =>
+      _authenticate(localizedReason: localizedReason, biometricOnly: false);
+
+  /// Biometrics only (no PIN fallback).
+  Future<bool> authenticateWithBiometrics({required String localizedReason}) =>
+      _authenticate(localizedReason: localizedReason, biometricOnly: true);
+
+  Future<bool> _authenticate({
+    required String localizedReason,
+    required bool biometricOnly,
+  }) async {
+    if (!_isSupported || _isAuthenticating) return false;
+    _isAuthenticating = true;
     try {
-      _isAuthenticating = true;
-      authenticated = await auth.authenticate(
-        localizedReason: 'Let OS determine authentication method',
-        options: const AuthenticationOptions(
-          stickyAuth: true,
-        ),
+      _authorized = await auth.authenticate(
+        localizedReason: localizedReason,
+        biometricOnly: biometricOnly,
+        persistAcrossBackgrounding: true,
       );
-      _isAuthenticating = false;
+    } on LocalAuthException catch (e) {
+      debugPrint(e.toString());
+      _authorized = false;
     } on PlatformException catch (e) {
       debugPrint(e.toString());
-      _isAuthenticating = false;
       _authorized = false;
-      return _authorized;
-    }
-    _authorized = authenticated;
-
-    return _authorized;
-  }
-
-  Future<bool> authenticateWithBiometrics() async {
-    bool authenticated = false;
-    try {
-      _isAuthenticating = true;
-
-      authenticated = await auth.authenticate(
-        localizedReason:
-            'Scan your fingerprint (or face or whatever) to authenticate',
-        options: const AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: true,
-        ),
-      );
+    } finally {
       _isAuthenticating = false;
-    } on PlatformException catch (e) {
-      debugPrint(e.toString());
-      _isAuthenticating = false;
-      _authorized = false;
-      return _authorized;
     }
-
-    _authorized = authenticated;
     return _authorized;
   }
 
   Future<void> cancelAuthentication() async {
-    await auth.stopAuthentication();
-    _isAuthenticating = false;
+    try {
+      await auth.stopAuthentication();
+    } finally {
+      _isAuthenticating = false;
+    }
   }
 }

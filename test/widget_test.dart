@@ -1,30 +1,82 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_template/main.dart';
+import 'package:flutter_template/providers/fingerprint_service.dart';
+import 'package:flutter_template/providers/auth_provider.dart';
+import 'package:flutter_template/views/access_page.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:provider/provider.dart';
 
-import 'package:flutter_template/app.dart';
+/// Avoids the local_auth platform channel in tests.
+class FakeLocalAuthentication extends LocalAuthentication {
+  @override
+  Future<bool> isDeviceSupported() async => false;
+}
+
+Future<void> pumpApp(WidgetTester tester, Map<String, String> storage) async {
+  FlutterSecureStorage.setMockInitialValues(storage);
+  await tester.pumpWidget(
+    ChangeNotifierProvider(
+      create: (_) => AuthProvider(
+        fingerprintService: FingerprintService(
+          localAuthentication: FakeLocalAuthentication(),
+        ),
+      ),
+      child: const AppBootstrap(),
+    ),
+  );
+  // Storage initialization + LoadingScreen delay.
+  await tester.pump();
+  await tester.pump(const Duration(seconds: 1));
+  await tester.pump();
+}
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('without a saved token the login page is shown', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(tester, {'os': 'android', 'id': 'device-1'});
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.byType(AccessView), findsOneWidget);
+    expect(find.text('Log In'), findsOneWidget);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+  testWidgets('the login form validates its fields', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(tester, {'os': 'android', 'id': 'device-1'});
+
+    await tester.tap(find.text('Log In'));
     await tester.pump();
+    expect(find.text('Enter valid email'), findsOneWidget);
+    expect(
+      find.text('Password must be at least 7 characters long'),
+      findsOneWidget,
+    );
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  testWidgets('the saved language is used', (WidgetTester tester) async {
+    await pumpApp(tester, {
+      'os': 'android',
+      'id': 'device-1',
+      'language': 'it',
+    });
+
+    expect(find.text('Accedi'), findsOneWidget);
+  });
+
+  testWidgets('unsupported platforms show an error instead of crashing', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(tester, {'os': 'linux', 'id': 'device-1'});
+
+    expect(find.byType(AccessView), findsNothing);
+    expect(find.textContaining('not supported'), findsOneWidget);
+  });
+
+  test('email validation', () {
+    expect(AccessView.isValidEmail('name@example.com'), isTrue);
+    expect(AccessView.isValidEmail('name@example'), isFalse);
+    expect(AccessView.isValidEmail('not an email'), isFalse);
   });
 }

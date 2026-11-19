@@ -1,9 +1,7 @@
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:flutter_template/providers/auth_provider.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:uuid/uuid.dart';
 
 enum OperatingSystems {
@@ -14,450 +12,273 @@ enum OperatingSystems {
   linux,
   windows,
   xOS,
-  unsupported
+  unsupported,
 }
 
+/// Platforms the app accepts. Add e.g. [OperatingSystems.linux] here to
+/// enable it (remember the platform setup required by the plugins).
+const Set<OperatingSystems> supportedOperatingSystems = {
+  OperatingSystems.android,
+  OperatingSystems.iOS,
+};
+
+/// Information about the device, persisted on first launch.
+class DeviceData {
+  final OperatingSystems os;
+  final String id;
+  final String brand;
+  final String model;
+
+  const DeviceData({
+    required this.os,
+    required this.id,
+    required this.brand,
+    required this.model,
+  });
+
+  bool get isSupported => supportedOperatingSystems.contains(os);
+}
+
+/// Persistent app state, saved in the platform secure storage.
 class StorageService {
-  String themeKey = 'theme';
-  String languageKey = 'language';
-  String emailsKey = 'emails';
-  String currentEmailKey = 'current-email';
-  String passwordKey = 'password';
-  String userIdKey = 'user-id';
-  String typeKey = 'type';
-  String idKey = 'id';
-  String tokenKey = 'token';
-  String sessionTokenKey = 'session-token';
-  String brandKey = 'brand';
-  String modelKey = 'model';
-  String osKey = 'os';
-  String keepLoggedKey = 'keep-logged';
-  String lastUpdated = 'last-updated';
+  static const themeKey = 'theme';
+  static const languageKey = 'language';
+  static const emailsKey = 'emails';
+  static const currentEmailKey = 'current-email';
+  static const passwordKeyPrefix = 'password';
+  static const userIdKey = 'user-id';
+  static const typeKey = 'type';
+  static const idKey = 'id';
+  static const tokenKey = 'token';
+  static const sessionTokenKey = 'session-token';
+  static const brandKey = 'brand';
+  static const modelKey = 'model';
+  static const osKey = 'os';
+  static const keepLoggedKey = 'keep-logged';
+  static const lastUpdatedKey = 'last-updated';
 
-  AuthProvider authProvider;
+  static const defaultLanguage = 'en';
 
-  StorageService({required this.authProvider});
+  final FlutterSecureStorage storage;
 
-  Future<ThemeMode> getTheme(FlutterSecureStorage storage) async {
-    switch (await storage.read(key: themeKey) ?? "ThemeMode.system") {
-      case 'ThemeMode.light':
-        return ThemeMode.light;
-      case 'ThemeMode.dark':
-        return ThemeMode.dark;
-      default:
-        return ThemeMode.system;
-    }
-  }
+  StorageService({FlutterSecureStorage? storage})
+    : storage =
+          storage ??
+          const FlutterSecureStorage(
+            iOptions: IOSOptions(accountName: 'FlutterTemplate'),
+          );
 
   // GETTERS
 
-  Future<String> getLanguage(FlutterSecureStorage storage) async {
-    return await storage.read(key: languageKey) ?? "en,US";
+  Future<ThemeMode> getTheme() async {
+    final value = await storage.read(key: themeKey);
+    return ThemeMode.values.firstWhere(
+      (mode) => value == mode.name || value == mode.toString(),
+      orElse: () => ThemeMode.system,
+    );
   }
 
-  Future<String> getToken(FlutterSecureStorage storage) async {
-    return await storage.read(key: tokenKey) ?? "";
+  /// Language code (`en`, `it`...). Also accepts the legacy `en,US` format.
+  Future<String> getLanguage() async {
+    final value = await storage.read(key: languageKey);
+    if (value == null || value.isEmpty) return defaultLanguage;
+    return value.split(RegExp('[,_-]')).first.toLowerCase();
   }
 
-  Future<String> getUserId(FlutterSecureStorage storage) async {
-    return await storage.read(key: userIdKey) ?? "";
+  Future<String> getToken() async => await storage.read(key: tokenKey) ?? '';
+
+  Future<String> getUserId() async => await storage.read(key: userIdKey) ?? '';
+
+  Future<String> getSessionToken() async =>
+      await storage.read(key: sessionTokenKey) ?? '';
+
+  Future<int?> getLastUpdated() async {
+    final value = await storage.read(key: lastUpdatedKey);
+    if (value == null || value.isEmpty) return null;
+    return int.tryParse(value);
   }
 
-  Future<String> getSessionToken(FlutterSecureStorage storage) async {
-    return await storage.read(key: sessionTokenKey) ?? "";
+  Future<List<String>> getEmails() async {
+    final emails = await storage.read(key: emailsKey) ?? '';
+    return emails.split(',').where((e) => e.isNotEmpty).toList();
   }
 
-  Future<int?> getLastUpdated(FlutterSecureStorage storage) async {
-    String? res = await storage.read(key: lastUpdated);
-    if (res == null || res.isEmpty) return null;
-    return int.tryParse(res);
-  }
+  Future<String> getCurrentEmail() async =>
+      await storage.read(key: currentEmailKey) ?? '';
 
-  Future<List<String>> getEmails(FlutterSecureStorage storage) async {
-    String emails = await storage.read(key: emailsKey) ?? "";
-    if (emails.isEmpty) return [];
-    return emails.split(',');
-  }
+  Future<String?> getPassword(String email) =>
+      storage.read(key: _passwordKey(email));
 
-  Future<String> getCurrentEmail(FlutterSecureStorage storage) async {
-    return await storage.read(key: currentEmailKey) ?? "";
-  }
+  Future<String> getType(String email) async =>
+      await storage.read(key: _typeKey(email)) ?? '';
 
-  Future<String?> getPassword(
-      FlutterSecureStorage storage, String email) async {
-    return await storage.read(key: email);
-  }
+  Future<bool> getKeepLogged() async =>
+      await storage.read(key: keepLoggedKey) == '1';
 
-  Future<String> getType(FlutterSecureStorage storage, String email) async {
-    return await storage.read(key: '$typeKey-$email') ?? 'player';
-  }
+  Future<String> getId() async => await storage.read(key: idKey) ?? '';
 
-  Future<bool> getKeepLogged(FlutterSecureStorage storage) async {
-    return await storage.read(key: keepLoggedKey) == '1';
-  }
+  Future<String> getBrand() async => await storage.read(key: brandKey) ?? '';
 
-  Future<String> getId(FlutterSecureStorage storage) async {
-    return await storage.read(key: idKey) ?? "";
-  }
+  Future<String> getModel() async => await storage.read(key: modelKey) ?? '';
 
-  Future<String> getBrand(FlutterSecureStorage storage) async {
-    return await storage.read(key: brandKey) ?? "";
-  }
-
-  Future<String> getModel(FlutterSecureStorage storage) async {
-    return await storage.read(key: modelKey) ?? "";
-  }
-
-  Future<OperatingSystems> getOs(FlutterSecureStorage storage) async {
-    switch (await storage.read(key: osKey) ?? "OperatingSystems.unknown") {
-      case 'OperatingSystems.android':
-        return OperatingSystems.android;
-      case 'OperatingSystems.iOS':
-        return OperatingSystems.iOS;
-      case 'OperatingSystems.unknown':
-        return OperatingSystems.unknown;
-      // case 'OperatingSystems.web':
-      //   return OperatingSystems.web;
-      // case 'OperatingSystems.linux':
-      //   return OperatingSystems.linux;
-      // case 'OperatingSystems.windows':
-      //   return OperatingSystems.windows;
-      // case 'OperatingSystems.macOS':
-      //   return OperatingSystems.xOS;
-      default:
-        return OperatingSystems.unsupported;
-    }
+  Future<OperatingSystems> getOs() async {
+    final value = await storage.read(key: osKey);
+    if (value == null || value.isEmpty) return OperatingSystems.unknown;
+    return OperatingSystems.values.firstWhere(
+      (os) => value == os.name || value == os.toString(),
+      orElse: () => OperatingSystems.unknown,
+    );
   }
 
   // SETTERS
 
-  Future<void> setCurrentEmail({
-    required FlutterSecureStorage storage,
-    required String newCurrentEmail,
-  }) async {
-    storage.write(key: currentEmailKey, value: newCurrentEmail);
+  /// Saves the current account and adds it to the list of known accounts.
+  Future<void> setCurrentEmail({required String newCurrentEmail}) async {
+    await storage.write(key: currentEmailKey, value: newCurrentEmail);
     if (newCurrentEmail.isEmpty) return;
 
-    List<String> emails = authProvider.emails;
-    for (String email in emails) {
-      if (email == newCurrentEmail) return;
-    }
+    final emails = await getEmails();
+    if (emails.contains(newCurrentEmail)) return;
     emails.add(newCurrentEmail);
     await storage.write(key: emailsKey, value: emails.join(','));
   }
 
-  void setPassword({
-    required FlutterSecureStorage storage,
+  Future<void> setPassword({
     required String email,
     required String newPassword,
-  }) {
-    storage.write(key: email, value: newPassword);
-  }
+  }) => storage.write(key: _passwordKey(email), value: newPassword);
 
-  void setToken({
-    required FlutterSecureStorage storage,
-    required String newToken,
-  }) {
-    storage.write(key: tokenKey, value: newToken);
-  }
+  Future<void> setToken({required String newToken}) =>
+      storage.write(key: tokenKey, value: newToken);
 
-  void setUserId({
-    required FlutterSecureStorage storage,
-    required String newUserId,
-  }) {
-    storage.write(key: userIdKey, value: newUserId);
-  }
+  Future<void> setUserId({required String newUserId}) =>
+      storage.write(key: userIdKey, value: newUserId);
 
-  void setSessionToken({
-    required FlutterSecureStorage storage,
-    required String newSessionToken,
-  }) {
-    storage.write(key: sessionTokenKey, value: newSessionToken);
-  }
+  Future<void> setSessionToken({required String newSessionToken}) =>
+      storage.write(key: sessionTokenKey, value: newSessionToken);
 
-  void setTheme({
-    required FlutterSecureStorage storage,
-    required ThemeMode newTheme,
-  }) {
-    storage.write(key: themeKey, value: newTheme.toString());
-  }
+  Future<void> setTheme({required ThemeMode newTheme}) =>
+      storage.write(key: themeKey, value: newTheme.name);
 
-  void setLanguage({
-    required FlutterSecureStorage storage,
-    required String newLanguage,
-  }) {
-    storage.write(key: languageKey, value: newLanguage);
-  }
+  Future<void> setLanguage({required String newLanguage}) =>
+      storage.write(key: languageKey, value: newLanguage);
 
-  void setType(
-      {required FlutterSecureStorage storage,
-      required String newType,
-      required String email}) {
-    storage.write(key: '$typeKey-$email', value: newType);
-  }
+  Future<void> setType({required String newType, required String email}) =>
+      storage.write(key: _typeKey(email), value: newType);
 
-  void setLastUpdate(
-      {required FlutterSecureStorage storage, required int newLastUpdate}) {
-    storage.write(key: lastUpdated, value: newLastUpdate.toString());
-  }
+  Future<void> setLastUpdate({required int newLastUpdate}) =>
+      storage.write(key: lastUpdatedKey, value: newLastUpdate.toString());
 
-  void setID({
-    required FlutterSecureStorage storage,
-    required String newID,
-  }) {
-    storage.write(key: idKey, value: newID);
-  }
+  Future<void> setID({required String newID}) =>
+      storage.write(key: idKey, value: newID);
 
-  void setBrand({
-    required FlutterSecureStorage storage,
-    required String newBrand,
-  }) {
-    storage.write(key: brandKey, value: newBrand);
-  }
+  Future<void> setBrand({required String newBrand}) =>
+      storage.write(key: brandKey, value: newBrand);
 
-  void setModel({
-    required FlutterSecureStorage storage,
-    required String newModel,
-  }) {
-    storage.write(key: modelKey, value: newModel);
-  }
+  Future<void> setModel({required String newModel}) =>
+      storage.write(key: modelKey, value: newModel);
 
-  void setOS({
-    required FlutterSecureStorage storage,
-    required OperatingSystems newOS,
-  }) {
-    storage.write(key: osKey, value: newOS.toString());
-  }
+  Future<void> setOS({required OperatingSystems newOS}) =>
+      storage.write(key: osKey, value: newOS.name);
 
-  void setKeepLogged({
-    required FlutterSecureStorage storage,
-    required bool keepLogged,
-  }) async {
-    storage.write(key: keepLoggedKey, value: keepLogged ? '1' : '0');
-  }
+  Future<void> setKeepLogged({required bool keepLogged}) =>
+      storage.write(key: keepLoggedKey, value: keepLogged ? '1' : '0');
 
-  Future<void> deleteAccount({
-    required FlutterSecureStorage storage,
-    required String account,
-  }) async {
+  /// Removes a saved account (and its password) from the device.
+  Future<void> deleteAccount({required String account}) async {
     if (account.isEmpty) return;
 
-    List<String> nuovi = [];
-    for (String email in authProvider.emails) {
-      if (email != account) nuovi.add(email);
+    final emails = await getEmails();
+    emails.remove(account);
+    await storage.write(key: emailsKey, value: emails.join(','));
+    await storage.delete(key: _passwordKey(account));
+    await storage.delete(key: _typeKey(account));
+    if (await getCurrentEmail() == account) {
+      await storage.write(key: currentEmailKey, value: '');
     }
-    await storage.write(key: emailsKey, value: nuovi.join(','));
-    await storage.delete(key: account);
-    await storage.delete(key: '$typeKey-$account');
   }
+
+  String _passwordKey(String email) => '$passwordKeyPrefix-$email';
+
+  String _typeKey(String email) => '$typeKey-$email';
 
   // DEVICE INITIALIZATION
 
-  Future<OperatingSystems> initPlatformState(
-      FlutterSecureStorage storage) async {
-    final DeviceInfoPlugin deviceInfoPlugin = DeviceInfoPlugin();
-
-    OperatingSystems os;
-    try {
-      if (kIsWeb) {
-        os = OperatingSystems.web;
-      } else {
-        os = switch (defaultTargetPlatform) {
-          TargetPlatform.android => OperatingSystems.android,
-          TargetPlatform.iOS => OperatingSystems.iOS,
-          TargetPlatform.linux => OperatingSystems.linux,
-          TargetPlatform.windows => OperatingSystems.windows,
-          TargetPlatform.macOS => OperatingSystems.xOS,
-          TargetPlatform.fuchsia => OperatingSystems.unsupported,
-        };
-      }
-
-      storage.write(key: osKey, value: os.toString());
-
-      if (os == OperatingSystems.unsupported) return os;
-
-      String uuid = const Uuid().v4();
-
-      switch (os) {
-        case OperatingSystems.android:
-          dynamic info =
-              _readAndroidBuildData(await deviceInfoPlugin.androidInfo);
-          storage.write(key: idKey, value: uuid);
-          storage.write(key: brandKey, value: info['brand']);
-          storage.write(key: modelKey, value: info['model']);
-          break;
-        case OperatingSystems.iOS:
-          dynamic info = _readIosDeviceInfo(await deviceInfoPlugin.iosInfo);
-          storage.write(key: idKey, value: uuid);
-          storage.write(key: brandKey, value: info['systemName']);
-          storage.write(
-              key: modelKey, value: info['utsname.machine:']['iOSProductName']);
-          break;
-        case OperatingSystems.linux:
-          dynamic info = _readLinuxDeviceInfo(await deviceInfoPlugin.linuxInfo);
-          storage.write(key: idKey, value: uuid);
-          storage.write(key: brandKey, value: info['machineId']);
-          storage.write(key: modelKey, value: info['versionId']);
-          break;
-        case OperatingSystems.web:
-          dynamic info =
-              _readWebBrowserInfo(await deviceInfoPlugin.webBrowserInfo);
-          storage.write(key: idKey, value: uuid);
-          storage.write(key: brandKey, value: info['vendor']);
-          storage.write(key: modelKey, value: info['product']);
-          break;
-        case OperatingSystems.xOS:
-          dynamic info = _readMacOsDeviceInfo(await deviceInfoPlugin.macOsInfo);
-          storage.write(key: idKey, value: uuid);
-          storage.write(key: brandKey, value: 'Apple');
-          storage.write(key: modelKey, value: info['model']);
-          break;
-        case OperatingSystems.windows:
-          dynamic info =
-              _readWindowsDeviceInfo(await deviceInfoPlugin.windowsInfo);
-          storage.write(key: idKey, value: uuid);
-          storage.write(key: brandKey, value: 'productName');
-          storage.write(key: modelKey, value: info['productId']);
-          break;
-        default:
-          return os;
-      }
-    } on PlatformException {
-      return OperatingSystems.unsupported;
+  /// Returns the stored device data, detecting and saving it on first launch.
+  Future<DeviceData> loadDeviceData({DeviceInfoPlugin? deviceInfo}) async {
+    var os = await getOs();
+    var id = await getId();
+    if (os != OperatingSystems.unknown && id.isNotEmpty) {
+      return DeviceData(
+        os: os,
+        id: id,
+        brand: await getBrand(),
+        model: await getModel(),
+      );
     }
-    return os;
+
+    os = detectOperatingSystem();
+    id = id.isNotEmpty ? id : const Uuid().v4();
+    var brand = '';
+    var model = '';
+
+    if (supportedOperatingSystems.contains(os)) {
+      try {
+        (brand, model) = await _readBrandAndModel(
+          os,
+          deviceInfo ?? DeviceInfoPlugin(),
+        );
+      } catch (e) {
+        // Device info is only informative: never block the app because of it.
+        debugPrint('Unable to read device info: $e');
+      }
+    }
+
+    await setOS(newOS: os);
+    await setID(newID: id);
+    await setBrand(newBrand: brand);
+    await setModel(newModel: model);
+    return DeviceData(os: os, id: id, brand: brand, model: model);
   }
 
-  Map<String, dynamic> _readAndroidBuildData(AndroidDeviceInfo build) {
-    return <String, dynamic>{
-      'version.securityPatch': build.version.securityPatch,
-      'version.sdkInt': build.version.sdkInt,
-      'version.release': build.version.release,
-      'version.previewSdkInt': build.version.previewSdkInt,
-      'version.incremental': build.version.incremental,
-      'version.codename': build.version.codename,
-      'version.baseOS': build.version.baseOS,
-      'board': build.board,
-      'bootloader': build.bootloader,
-      'brand': build.brand,
-      'device': build.device,
-      'display': build.display,
-      'fingerprint': build.fingerprint,
-      'hardware': build.hardware,
-      'host': build.host,
-      'id': build.id,
-      'manufacturer': build.manufacturer,
-      'model': build.model,
-      'product': build.product,
-      'supported32BitAbis': build.supported32BitAbis,
-      'supported64BitAbis': build.supported64BitAbis,
-      'supportedAbis': build.supportedAbis,
-      'tags': build.tags,
-      'type': build.type,
-      'isPhysicalDevice': build.isPhysicalDevice,
-      'systemFeatures': build.systemFeatures,
-      'isLowRamDevice': build.isLowRamDevice,
+  static OperatingSystems detectOperatingSystem() {
+    if (kIsWeb) return OperatingSystems.web;
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android => OperatingSystems.android,
+      TargetPlatform.iOS => OperatingSystems.iOS,
+      TargetPlatform.linux => OperatingSystems.linux,
+      TargetPlatform.windows => OperatingSystems.windows,
+      TargetPlatform.macOS => OperatingSystems.xOS,
+      TargetPlatform.fuchsia => OperatingSystems.unsupported,
     };
   }
 
-  Map<String, dynamic> _readIosDeviceInfo(IosDeviceInfo data) {
-    return <String, dynamic>{
-      'name': data.name,
-      'systemName': data.systemName,
-      'systemVersion': data.systemVersion,
-      'model': data.model,
-      'localizedModel': data.localizedModel,
-      'identifierForVendor': data.identifierForVendor,
-      'isPhysicalDevice': data.isPhysicalDevice,
-      'utsname.sysname:': data.utsname.sysname,
-      'utsname.nodename:': data.utsname.nodename,
-      'utsname.release:': data.utsname.release,
-      'utsname.version:': data.utsname.version,
-      'utsname.machine:': data.utsname.machine,
-    };
-  }
-
-  Map<String, dynamic> _readLinuxDeviceInfo(LinuxDeviceInfo data) {
-    return <String, dynamic>{
-      'name': data.name,
-      'version': data.version,
-      'id': data.id,
-      'idLike': data.idLike,
-      'versionCodename': data.versionCodename,
-      'versionId': data.versionId,
-      'prettyName': data.prettyName,
-      'buildId': data.buildId,
-      'variant': data.variant,
-      'variantId': data.variantId,
-      'machineId': data.machineId,
-    };
-  }
-
-  Map<String, dynamic> _readWebBrowserInfo(WebBrowserInfo data) {
-    return <String, dynamic>{
-      'browserName': data.browserName.name,
-      'appCodeName': data.appCodeName,
-      'appName': data.appName,
-      'appVersion': data.appVersion,
-      'deviceMemory': data.deviceMemory,
-      'language': data.language,
-      'languages': data.languages,
-      'platform': data.platform,
-      'product': data.product,
-      'productSub': data.productSub,
-      'userAgent': data.userAgent,
-      'vendor': data.vendor,
-      'vendorSub': data.vendorSub,
-      'hardwareConcurrency': data.hardwareConcurrency,
-      'maxTouchPoints': data.maxTouchPoints,
-    };
-  }
-
-  Map<String, dynamic> _readMacOsDeviceInfo(MacOsDeviceInfo data) {
-    return <String, dynamic>{
-      'computerName': data.computerName,
-      'hostName': data.hostName,
-      'arch': data.arch,
-      'model': data.model,
-      'kernelVersion': data.kernelVersion,
-      'majorVersion': data.majorVersion,
-      'minorVersion': data.minorVersion,
-      'patchVersion': data.patchVersion,
-      'osRelease': data.osRelease,
-      'activeCPUs': data.activeCPUs,
-      'memorySize': data.memorySize,
-      'cpuFrequency': data.cpuFrequency,
-      'systemGUID': data.systemGUID,
-    };
-  }
-
-  Map<String, dynamic> _readWindowsDeviceInfo(WindowsDeviceInfo data) {
-    return <String, dynamic>{
-      'numberOfCores': data.numberOfCores,
-      'computerName': data.computerName,
-      'systemMemoryInMegabytes': data.systemMemoryInMegabytes,
-      'userName': data.userName,
-      'majorVersion': data.majorVersion,
-      'minorVersion': data.minorVersion,
-      'buildNumber': data.buildNumber,
-      'platformId': data.platformId,
-      'csdVersion': data.csdVersion,
-      'servicePackMajor': data.servicePackMajor,
-      'servicePackMinor': data.servicePackMinor,
-      'suitMask': data.suitMask,
-      'productType': data.productType,
-      'reserved': data.reserved,
-      'buildLab': data.buildLab,
-      'buildLabEx': data.buildLabEx,
-      'digitalProductId': data.digitalProductId,
-      'displayVersion': data.displayVersion,
-      'editionId': data.editionId,
-      'installDate': data.installDate,
-      'productId': data.productId,
-      'productName': data.productName,
-      'registeredOwner': data.registeredOwner,
-      'releaseId': data.releaseId,
-      'deviceId': data.deviceId,
-    };
+  Future<(String, String)> _readBrandAndModel(
+    OperatingSystems os,
+    DeviceInfoPlugin plugin,
+  ) async {
+    switch (os) {
+      case OperatingSystems.android:
+        final info = await plugin.androidInfo;
+        return (info.brand, info.model);
+      case OperatingSystems.iOS:
+        final info = await plugin.iosInfo;
+        return ('Apple', info.modelName);
+      case OperatingSystems.xOS:
+        final info = await plugin.macOsInfo;
+        return ('Apple', info.modelName);
+      case OperatingSystems.linux:
+        final info = await plugin.linuxInfo;
+        return (info.name, info.prettyName);
+      case OperatingSystems.windows:
+        final info = await plugin.windowsInfo;
+        return ('Microsoft', info.productName);
+      case OperatingSystems.web:
+        final info = await plugin.webBrowserInfo;
+        return (info.vendor ?? '', info.browserName.name);
+      case OperatingSystems.unknown:
+      case OperatingSystems.unsupported:
+        return ('', '');
+    }
   }
 }

@@ -1,93 +1,161 @@
+import 'dart:async';
 import 'dart:convert';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_template/config/env.dart';
 import 'package:http/http.dart' as http;
 
+/// Called with the decoded JSON body when a request succeeds.
+typedef ResponseListener = void Function(Map<String, dynamic> response);
+
+/// Called when a request fails. [statusCode] is the HTTP status, or
+/// [HttpRequest.networkErrorStatus] when the server could not be reached.
+typedef ErrorListener =
+    void Function(Map<String, dynamic> response, int statusCode);
+
+/// Internal callback used by [HttpRequest] to hand the result to its owner.
+typedef ResponseHandler =
+    void Function(
+      String tag,
+      int statusCode,
+      Map<String, dynamic> response,
+      Map<String, String> headers,
+    );
+
+/// A request waiting in the [HttpService] queue.
 class HttpEntry {
-  final Function responseListener;
-  final Function? errorListener;
+  final ResponseListener responseListener;
+
+  /// When `null` the error message (if any) is shown in a snackbar.
+  final ErrorListener? errorListener;
   final String path, method;
   final Map<String, dynamic>? params;
   final String? body;
-  late String tag;
   final bool automatic;
 
-  HttpEntry(
-      {required this.responseListener,
-      required this.method,
-      required this.path,
-      this.errorListener,
-      this.body,
-      this.params,
-      this.automatic = true});
+  /// Unique key assigned by the queue.
+  late String tag;
+
+  /// How many times the queue has already retried this request.
+  int retries = 0;
+
+  HttpEntry({
+    required this.responseListener,
+    required this.method,
+    required this.path,
+    this.errorListener,
+    this.body,
+    this.params,
+    this.automatic = true,
+  });
 }
 
+/// Performs one HTTP call. [send] never throws: network errors, timeouts,
+/// configuration errors and malformed bodies are all reported to
+/// [managerResponse] as a `{"status": false, "data": "..."}` body.
 class HttpRequest {
+  /// Status code used when no HTTP response was received.
+  static const int networkErrorStatus = 0;
+  static const Duration defaultTimeout = Duration(seconds: 30);
+
   final String path, method, tag;
   final Map<String, dynamic>? params;
   final Map<String, String> headers;
-  late Function managerResponse;
-  late String? body;
-  late dynamic responseBody;
-  late HttpRequest oldReq, newReq;
-  late http.Request req;
+  final String? body;
+  final ResponseHandler managerResponse;
+  final Duration timeout;
+  final http.Client? client;
 
-  HttpRequest(
-      {required this.tag,
-      required this.method,
-      required this.path,
-      required this.managerResponse,
-      required this.headers,
-      this.body,
-      this.params});
+  HttpRequest({
+    required this.tag,
+    required this.method,
+    required this.path,
+    required this.managerResponse,
+    required this.headers,
+    this.body,
+    this.params,
+    this.timeout = defaultTimeout,
+    this.client,
+  });
 
-  Uri _getUrl() {
-    return Uri(
-        scheme: dotenv.get('HTTP_SCHEMA'),
-        host: dotenv.get('HOST'),
-        port: int.parse(dotenv.get('PORT')),
-        path: "${dotenv.get('API_PREFIX')}/$path",
-        queryParameters: params);
+  Future<void> send() async {
+    int statusCode;
+    Map<String, dynamic> responseBody;
+    Map<String, String> responseHeaders = const {};
+
+    try {
+      final request = http.Request(method, Env.apiUri(path, params));
+      request.headers.addAll(headers);
+      if (body != null) request.body = body!;
+
+      final ownClient = client == null;
+      final httpClient = client ?? http.Client();
+      try {
+        final streamed = await httpClient.send(request).timeout(timeout);
+        final response = await http.Response.fromStream(
+          streamed,
+        ).timeout(timeout);
+        statusCode = response.statusCode;
+        responseHeaders = response.headers;
+        responseBody = decodeBody(response.statusCode, response.body);
+      } finally {
+        if (ownClient) httpClient.close();
+      }
+    } on TimeoutException {
+      statusCode = networkErrorStatus;
+      responseBody = {'status': false, 'data': 'Request timed out.'};
+    } on EnvConfigurationError catch (e) {
+      debugPrint(e.toString());
+      statusCode = networkErrorStatus;
+      responseBody = {'status': false, 'data': 'Configuration error.'};
+    } catch (e) {
+      debugPrint('HTTP $method $path failed: $e');
+      statusCode = networkErrorStatus;
+      responseBody = {'status': false, 'data': 'Network error.'};
+    }
+
+    managerResponse(tag, statusCode, responseBody, responseHeaders);
   }
 
-  void _initRequest() {
-    req = http.Request(method, _getUrl());
+  /// Normalizes any response body to a map with at least a `status` key.
+  @visibleForTesting
+  static Map<String, dynamic> decodeBody(int statusCode, String body) {
+    final success = statusCode >= 200 && statusCode < 300;
 
-    headers.forEach((key, value) {
-      req.headers[key] = value;
-    });
+    if (body.trim().isEmpty) {
+      return {'status': success, 'data': _defaultMessage(statusCode)};
+    }
 
-    if (body != null) {
-      req.body = body!;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        return decoded.containsKey('status')
+            ? decoded
+            : {...decoded, 'status': success};
+      }
+      return {'status': success, 'data': decoded};
+    } on FormatException {
+      return {
+        'status': false,
+        'data': success
+            ? 'Error reading response.'
+            : _defaultMessage(statusCode),
+      };
     }
   }
 
-  void send() async {
-    _initRequest();
-
-    http.StreamedResponse response = await req.send();
-
-    switch (response.statusCode) {
+  static String _defaultMessage(int statusCode) {
+    switch (statusCode) {
       case 204:
-        responseBody = {"status": true, "data": "No Content."};
-        break;
+        return 'No Content.';
       case 404:
-        responseBody = {"status": false, "data": "Not found."};
-        break;
-      case 500:
-        responseBody = {"status": false, "data": "Server error."};
-        break;
+        return 'Not found.';
+      case >= 500:
+        return 'Server error.';
       default:
-        try {
-          responseBody = jsonDecode(await response.stream.bytesToString());
-        } on Exception catch (_) {
-          responseBody = {"status": false, "data": "Error reading response."};
-        }
+        return statusCode >= 200 && statusCode < 300
+            ? 'OK.'
+            : 'Request failed ($statusCode).';
     }
-
-    // log("Status: ${response.statusCode}");
-
-    // log("Data: $responseBody");
-
-    managerResponse(tag, response.statusCode, responseBody, response.headers);
   }
 }

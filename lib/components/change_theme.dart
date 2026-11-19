@@ -12,7 +12,7 @@ class ChangeTheme extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 5),
       child: DropdownButton<ThemeMode>(
         // Read the selected themeMode from the controller
-        value: context.watch<AuthProvider>().theme,
+        value: context.select<AuthProvider, ThemeMode>((p) => p.theme),
         // Call the updateThemeMode method any time the user selects a theme.
         onChanged: (ThemeMode? value) {
           if (value != null) {
@@ -26,12 +26,12 @@ class ChangeTheme extends StatelessWidget {
           ),
           DropdownMenuItem(
             value: ThemeMode.light,
-            child: Text(AppLocalizations.of(context)!.ligth_theme),
+            child: Text(AppLocalizations.of(context)!.light_theme),
           ),
           DropdownMenuItem(
             value: ThemeMode.dark,
             child: Text(AppLocalizations.of(context)!.dark_theme),
-          )
+          ),
         ],
       ),
     );

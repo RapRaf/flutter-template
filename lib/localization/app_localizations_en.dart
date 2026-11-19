@@ -33,7 +33,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dark_theme => 'Dark Theme';
 
   @override
-  String get ligth_theme => 'Light Theme';
+  String get light_theme => 'Light Theme';
 
   @override
   String get item_details => 'Item Details';
@@ -171,4 +171,30 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get already_logged_in_with => 'You are already logged in with:';
+
+  @override
+  String get password => 'Password';
+
+  @override
+  String get unsupported_device =>
+      'Something went wrong, try restarting the application. If the error persists, your device is not supported.';
+
+  @override
+  String get session_expired => 'Session expired, please log in again.';
+
+  @override
+  String get network_error =>
+      'Unable to reach the server. Check your connection and try again.';
+
+  @override
+  String get generic_error => 'Something went wrong.';
+
+  @override
+  String get biometric_reason => 'Authenticate to access your account';
+
+  @override
+  String get theme => 'Theme';
+
+  @override
+  String get language => 'Language';
 }
